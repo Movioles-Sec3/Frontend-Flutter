@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'pages/home_page.dart';
 
 void main() {
@@ -8,30 +9,99 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+    const Color primary = Color(0xFF4A90E2);
+    const Color secondary = Color(0xFF7B61FF);
+    const Color accent = Color(0xFFFF6B6B); // used as error/attention
+
+    final TextTheme lightTextTheme =
+        GoogleFonts.interTextTheme(ThemeData.light().textTheme)
+            .copyWith(
+              titleLarge: GoogleFonts.montserrat(
+                textStyle: ThemeData.light().textTheme.titleLarge,
+                fontWeight: FontWeight.w600,
+              ),
+            )
+            .apply(
+              bodyColor: const Color(0xFF1A1A1A),
+              displayColor: const Color(0xFF1A1A1A),
+            );
+
+    final TextTheme darkTextTheme =
+        GoogleFonts.interTextTheme(ThemeData.dark().textTheme)
+            .copyWith(
+              titleLarge: GoogleFonts.montserrat(
+                textStyle: ThemeData.dark().textTheme.titleLarge,
+                fontWeight: FontWeight.w600,
+              ),
+            )
+            .apply(bodyColor: Colors.white, displayColor: Colors.white);
+
+    final ThemeData lightTheme = ThemeData(
+      useMaterial3: true,
+      colorScheme: const ColorScheme(
+        brightness: Brightness.light,
+        primary: primary,
+        onPrimary: Colors.white,
+        secondary: secondary,
+        onSecondary: Colors.white,
+        error: accent,
+        onError: Colors.white,
+        surface: Color(0xFFF5F7FA),
+        onSurface: Color(0xFF1A1A1A),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      textTheme: lightTextTheme,
+      appBarTheme: const AppBarTheme(
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: Color(0xFFF5F7FA),
+        foregroundColor: Color(0xFF1A1A1A),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        selectedItemColor: primary,
+        unselectedItemColor: Color(0xFF5F6A7D),
+        showUnselectedLabels: true,
+        type: BottomNavigationBarType.fixed,
+      ),
+      chipTheme: const ChipThemeData(shape: StadiumBorder()),
+    );
+
+    final ThemeData darkTheme = ThemeData(
+      useMaterial3: true,
+      colorScheme: const ColorScheme(
+        brightness: Brightness.dark,
+        primary: primary,
+        onPrimary: Colors.white,
+        secondary: secondary,
+        onSecondary: Colors.white,
+        error: accent,
+        onError: Colors.white,
+        surface: Color(0xFF121212),
+        onSurface: Colors.white,
+      ),
+      textTheme: darkTextTheme,
+      appBarTheme: const AppBarTheme(
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: Color(0xFF1E1E1E),
+        foregroundColor: Colors.white,
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        selectedItemColor: primary,
+        unselectedItemColor: Color(0xFFB0B3B8),
+        showUnselectedLabels: true,
+        type: BottomNavigationBarType.fixed,
+      ),
+      chipTheme: const ChipThemeData(shape: StadiumBorder()),
+    );
+
+    return MaterialApp(
+      title: 'TapAndToast',
+      theme: lightTheme,
+      darkTheme: darkTheme,
+      themeMode: ThemeMode.system,
+      home: const MyHomePage(title: 'Home'),
     );
   }
 }
@@ -81,7 +151,6 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(_titles[_currentIndex]),
         centerTitle: true,
         actions: _currentIndex == 0
