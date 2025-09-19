@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'categories_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -51,7 +52,16 @@ class HomePage extends StatelessWidget {
             const SizedBox(height: 16),
             _Promotions(promotions: _promotions),
             const SizedBox(height: 16),
-            _SectionHeader(title: 'Categories'),
+            _HeaderWithSeeAll(
+              title: 'Categories',
+              onSeeAll: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const CategoriesPage(),
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: 8),
             _CategoriesList(categories: _categories),
             const SizedBox(height: 16),
@@ -257,6 +267,37 @@ class _SectionHeader extends StatelessWidget {
       style: Theme.of(
         context,
       ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+    );
+  }
+}
+
+class _HeaderWithSeeAll extends StatelessWidget {
+  const _HeaderWithSeeAll({required this.title, required this.onSeeAll});
+
+  final String title;
+  final VoidCallback onSeeAll;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ),
+        TextButton.icon(
+          onPressed: onSeeAll,
+          icon: const Icon(Icons.grid_view_outlined, size: 18),
+          label: const Text('See all'),
+          style: TextButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+      ],
     );
   }
 }
