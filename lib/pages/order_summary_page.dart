@@ -20,7 +20,7 @@ class CartItem {
 
 class OrderSummaryPage extends StatelessWidget {
   final List<CartItem> items;
-  final double taxRate; // ej: 0.10 = 10%
+  final double taxRate;
 
   const OrderSummaryPage({super.key, required this.items, this.taxRate = 0.10});
 

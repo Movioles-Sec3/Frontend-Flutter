@@ -4,7 +4,6 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:intl/intl.dart';
 
 class OrderPickupPage extends StatelessWidget {
-  /// Estructura libre; puede ser tu Order/Cart real.
   final Map<String, dynamic> order;
 
   const OrderPickupPage({super.key, required this.order});
