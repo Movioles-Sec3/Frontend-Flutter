@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_tapandtoast/pages/order_summary_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'pages/home_page.dart';
 
@@ -134,6 +135,27 @@ class _MyHomePageState extends State<MyHomePage> {
     'Profile',
   ];
 
+  final List<CartItem> _cart = const [
+    CartItem(
+      name: 'Craft IPA Beer',
+      quantity: 2,
+      unitPrice: 5.00,
+      image: 'assets/img/beer.png',
+    ),
+    CartItem(
+      name: 'Assorted Tapas',
+      quantity: 1,
+      unitPrice: 10.00,
+      image: 'assets/img/tapas.png',
+    ),
+    CartItem(
+      name: 'Lemon Soda',
+      quantity: 3,
+      unitPrice: 1.67,
+      image: 'assets/img/soda.png',
+    ),
+  ];
+
   static const List<Widget> _pages = <Widget>[
     HomePage(),
     Center(child: Text('Search')),
@@ -156,7 +178,17 @@ class _MyHomePageState extends State<MyHomePage> {
         actions: _currentIndex == 0
             ? <Widget>[
                 IconButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => OrderSummaryPage(
+                          items: _cart,
+                          taxRate: 0.10, // 10% (ajústalo)
+                        ),
+                      ),
+                    );
+                  },
                   icon: const Icon(Icons.shopping_cart_outlined),
                   tooltip: 'Cart',
                 ),
