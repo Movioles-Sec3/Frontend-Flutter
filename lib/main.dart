@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_tapandtoast/pages/login_page.dart';
 import 'package:flutter_tapandtoast/pages/order_summary_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'pages/home_page.dart';
@@ -102,7 +103,7 @@ class MyApp extends StatelessWidget {
       theme: lightTheme,
       darkTheme: darkTheme,
       themeMode: ThemeMode.system,
-      home: const MyHomePage(title: 'Home'),
+      home: const LoginPage(),
     );
   }
 }

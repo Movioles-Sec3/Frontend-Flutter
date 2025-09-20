@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_tapandtoast/pages/product_page.dart';
 
 class CategoriesPage extends StatelessWidget {
   const CategoriesPage({super.key});
@@ -30,7 +31,15 @@ class CategoriesPage extends StatelessWidget {
           itemBuilder: (BuildContext context, int index) {
             final _Cat cat = _categories[index];
             return OutlinedButton.icon(
-              onPressed: () {},
+              onPressed: () {
+                if (cat.label == 'Drinks') {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ProductPage(),
+                    ),
+                  );
+                }
+              },
               icon: Icon(cat.icon),
               label: Text(cat.label),
               style: OutlinedButton.styleFrom(
