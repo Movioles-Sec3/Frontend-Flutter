@@ -17,6 +17,7 @@ import '../domain/usecases/get_products_by_category_usecase.dart';
 import '../domain/usecases/login_usecase.dart';
 import '../domain/usecases/recharge_usecase.dart';
 import '../domain/usecases/register_usecase.dart';
+import '../domain/usecases/submit_seat_delivery_survey_usecase.dart';
 
 final GetIt injector = GetIt.instance;
 
@@ -62,6 +63,9 @@ Future<void> setupDependencies() async {
   );
   injector.registerFactory<RechargeUseCase>(
     () => RechargeUseCase(injector.get<UserRepository>()),
+  );
+  injector.registerFactory<SubmitSeatDeliverySurveyUseCase>(
+    () => SubmitSeatDeliverySurveyUseCase(injector.get<UserRepository>()),
   );
 
   // Strategy contexts

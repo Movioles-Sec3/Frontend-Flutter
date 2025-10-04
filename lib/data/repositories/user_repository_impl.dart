@@ -38,4 +38,23 @@ class UserRepositoryImpl implements UserRepository {
     }
     return Result.failure('Invalid server response');
   }
+
+  @override
+  Future<Result<void>> submitSeatDeliverySurvey({
+    required String interestLevel,
+    required int extraMinutes,
+    String? comments,
+  }) async {
+    final Result<dynamic> res = await _apiClient.post(
+      '/usuarios/me/encuesta',
+      body: <String, dynamic>{
+        'nivel_interes': interestLevel,
+        'minutos_extra': extraMinutes,
+        'comentarios': comments ?? '',
+      },
+      auth: true,
+    );
+    if (res.isFailure) return Result.failure(res.error!);
+    return Result.success(null);
+  }
 }
