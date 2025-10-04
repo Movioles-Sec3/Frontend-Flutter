@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'categories_page.dart';
+import 'products_by_category_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -18,10 +19,9 @@ class HomePage extends StatelessWidget {
   ];
 
   static const List<_Category> _categories = <_Category>[
-    _Category(label: 'Beers', icon: Icons.local_drink_outlined),
-    _Category(label: 'Cocktails', icon: Icons.wine_bar_outlined),
-    _Category(label: 'Food', icon: Icons.fastfood_outlined),
-    _Category(label: 'Wine', icon: Icons.liquor_outlined),
+    _Category(id: 1, label: 'Beers', icon: Icons.local_drink_outlined),
+    _Category(id: 2, label: 'Cocktails', icon: Icons.wine_bar_outlined),
+    _Category(id: 3, label: 'Tapas', icon: Icons.fastfood_outlined),
   ];
 
   static const List<_Venue> _nearbyVenues = <_Venue>[
@@ -176,29 +176,43 @@ class _CategoriesList extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(width: 16),
         itemBuilder: (BuildContext context, int index) {
           final _Category category = categories[index];
-          return Column(
-            children: <Widget>[
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
+          return GestureDetector(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ProductsByCategoryPage(
+                    categoryId: category.id,
+                    categoryName: category.label,
+                  ),
                 ),
-                child: Icon(category.icon),
-              ),
-              const SizedBox(height: 6),
-              SizedBox(
-                width: 68,
-                child: Text(
-                  category.label,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
+              );
+            },
+            child: Column(
+              children: <Widget>[
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(category.icon),
                 ),
-              ),
-            ],
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: 68,
+                  child: Text(
+                    category.label,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),
@@ -303,7 +317,8 @@ class _HeaderWithSeeAll extends StatelessWidget {
 }
 
 class _Category {
-  const _Category({required this.label, required this.icon});
+  const _Category({required this.id, required this.label, required this.icon});
+  final int id;
   final String label;
   final IconData icon;
 }
