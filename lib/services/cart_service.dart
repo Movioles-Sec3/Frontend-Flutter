@@ -68,6 +68,25 @@ class CartService extends ChangeNotifier {
 
   int getQuantity(int productId) => _itemsById[productId]?.quantity ?? 0;
 
+  void setQuantity(int productId, int quantity) {
+    if (quantity <= 0) {
+      _itemsById.remove(productId);
+      notifyListeners();
+      return;
+    }
+    final CartItemData? existing = _itemsById[productId];
+    if (existing != null) {
+      existing.quantity = quantity;
+      notifyListeners();
+    }
+  }
+
+  void remove(int productId) {
+    if (_itemsById.remove(productId) != null) {
+      notifyListeners();
+    }
+  }
+
   void clear() {
     _itemsById.clear();
     notifyListeners();

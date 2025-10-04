@@ -75,12 +75,12 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
           });
         } else {
           setState(() {
-            _error = 'Respuesta inválida del servidor';
+            _error = 'Invalid server response';
             _loading = false;
           });
         }
       } else {
-        String message = 'No se pudieron obtener los productos';
+        String message = 'Could not fetch products';
         try {
           final dynamic data = jsonDecode(res.body);
           if (data is Map && data['detail'] != null) {
@@ -95,7 +95,7 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Error de red: $e';
+        _error = 'Network error: $e';
         _loading = false;
       });
     }
@@ -121,7 +121,7 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
           children: <Widget>[
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            ElevatedButton(onPressed: _load, child: const Text('Reintentar')),
+            ElevatedButton(onPressed: _load, child: const Text('Retry')),
           ],
         ),
       );

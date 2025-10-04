@@ -29,9 +29,9 @@ class _LoginPageState extends State<LoginPage> {
     final String email = _emailController.text.trim();
     final String password = _passwordController.text;
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresa email y contraseña')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enter email and password')));
       return;
     }
 
@@ -62,7 +62,7 @@ class _LoginPageState extends State<LoginPage> {
         final String accessToken = data['access_token']?.toString() ?? '';
         final String tokenType = data['token_type']?.toString() ?? 'Bearer';
         if (accessToken.isEmpty) {
-          throw Exception('Token inválido');
+          throw Exception('Invalid token');
         }
 
         await SessionManager.saveToken(
@@ -78,7 +78,7 @@ class _LoginPageState extends State<LoginPage> {
           ),
         );
       } else {
-        String message = 'Credenciales inválidas';
+        String message = 'Invalid credentials';
         try {
           final dynamic data = jsonDecode(res.body);
           if (data is Map && data['detail'] != null) {
@@ -93,7 +93,7 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Error de red: $e')));
+      ).showSnackBar(SnackBar(content: Text('Network error: $e')));
     } finally {
       if (mounted) {
         setState(() {
