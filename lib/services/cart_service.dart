@@ -102,4 +102,32 @@ class CartService extends ChangeNotifier {
         )
         .toList(growable: false);
   }
+
+  /// Adds all products from a previous order to the cart
+  void reorderFromOrder(List<Map<String, dynamic>> orderProducts) {
+    for (final Map<String, dynamic> product in orderProducts) {
+      final int productId = (product['id_producto'] as num?)?.toInt() ?? 0;
+      final int quantity = (product['cantidad'] as num?)?.toInt() ?? 0;
+      final String name = (product['nombre'] ?? '').toString();
+      final String imageUrl = (product['imagen_url'] ?? '').toString();
+      final double unitPrice = ((product['precio'] ?? 0) as num).toDouble();
+
+      if (productId > 0 && quantity > 0) {
+        // Add or update the product in cart
+        final CartItemData? existing = _itemsById[productId];
+        if (existing != null) {
+          existing.quantity += quantity;
+        } else {
+          _itemsById[productId] = CartItemData(
+            productId: productId,
+            name: name,
+            imageUrl: imageUrl,
+            unitPrice: unitPrice,
+            quantity: quantity,
+          );
+        }
+      }
+    }
+    notifyListeners();
+  }
 }
