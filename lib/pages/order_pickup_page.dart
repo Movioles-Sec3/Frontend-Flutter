@@ -3,13 +3,14 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
+import 'package:get_it/get_it.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 
-import '../config/api_config.dart';
-import '../services/session_manager.dart';
+import '../core/result.dart';
+import '../domain/entities/order.dart';
+import '../domain/usecases/get_my_orders_usecase.dart';
 
 class OrderPickupPage extends StatefulWidget {
   final Map<String, dynamic> order;
@@ -115,44 +116,30 @@ class _OrderPickupPageState extends State<OrderPickupPage>
 
     _isFetchingStatus = true;
     try {
-      final String? token = await SessionManager.getAccessToken();
-      if (token == null || token.isEmpty) {
-        _statusTimer?.cancel();
-        _statusTimer = null;
-        return;
-      }
-
-      final String tokenType = (await SessionManager.getTokenType()) ?? 'Bearer';
-      final Uri url = Uri.parse('${ApiConfig.baseUrl}/compras/me');
-      final http.Response res = await http.get(
-        url,
-        headers: <String, String>{
-          'Authorization': '$tokenType $token',
-          'Accept': 'application/json',
-        },
-      );
-
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final dynamic data = jsonDecode(res.body);
-        if (data is List) {
-          Map<String, dynamic>? latest;
-          for (final dynamic item in data) {
-            if (item is Map) {
-              final Map<String, dynamic> mapItem =
-                  item.map((dynamic key, dynamic value) => MapEntry(
-                        key.toString(),
-                        value,
-                      ));
-              final int? currentId = (mapItem['id'] as num?)?.toInt();
-              if (currentId == orderId) {
-                latest = mapItem;
-                break;
-              }
-            }
+      final GetMyOrdersUseCase useCase = GetIt.I.get<GetMyOrdersUseCase>();
+      final Result<List<OrderEntity>> result = await useCase();
+      if (result.isSuccess) {
+        final List<OrderEntity> list = result.data!;
+        OrderEntity? found;
+        for (final OrderEntity e in list) {
+          if (e.id == orderId) {
+            found = e;
+            break;
           }
-          if (latest != null) {
-            _updateOrder(latest);
-          }
+        }
+        if (found != null) {
+          _updateOrder(
+            found.raw ??
+                <String, dynamic>{
+                  'id': found.id,
+                  'total': found.total,
+                  'estado': found.status,
+                  'fecha_hora': found.placedAt,
+                  'fecha_listo': found.readyAt ?? '',
+                  'fecha_entregado': found.deliveredAt ?? '',
+                  if (found.qr != null) 'qr': found.qr,
+                },
+          );
         }
       }
     } catch (_) {

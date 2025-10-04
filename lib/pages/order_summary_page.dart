@@ -1,12 +1,11 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_tapandtoast/pages/order_pickup_page.dart';
 import 'package:intl/intl.dart';
-import 'package:http/http.dart' as http;
-import '../config/api_config.dart';
-import '../services/session_manager.dart';
+import 'package:get_it/get_it.dart';
 import '../services/cart_service.dart';
+import '../core/result.dart';
+import '../domain/entities/order.dart';
+import '../domain/usecases/create_order_usecase.dart';
 
 class CartItem {
   final int productId;
@@ -28,9 +27,8 @@ class CartItem {
 
 class OrderSummaryPage extends StatelessWidget {
   final List<CartItem> items;
-  final double taxRate;
 
-  const OrderSummaryPage({super.key, required this.items, this.taxRate = 0.10});
+  const OrderSummaryPage({super.key, required this.items});
 
   String _money(double v) => NumberFormat.simpleCurrency().format(v);
 
@@ -54,8 +52,7 @@ class OrderSummaryPage extends StatelessWidget {
               0,
               (double s, CartItemData e) => s + e.lineTotal,
             );
-            final double taxes = subtotal * taxRate;
-            final double total = subtotal + taxes;
+            final double total = subtotal;
 
             return ListView(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -82,7 +79,6 @@ class OrderSummaryPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 _RowKV(label: 'Subtotal', value: _money(subtotal)),
-                _RowKV(label: 'Taxes', value: _money(taxes)),
                 const SizedBox(height: 4),
                 const Divider(),
                 _RowKV(label: 'Total', value: _money(total), isBold: true),
@@ -91,58 +87,39 @@ class OrderSummaryPage extends StatelessWidget {
                   onPressed: data.isEmpty
                       ? null
                       : () async {
-                          try {
-                            final String? token =
-                                await SessionManager.getAccessToken();
-                            final String type =
-                                (await SessionManager.getTokenType()) ??
-                                'Bearer';
-                            final Uri url = Uri.parse(
-                              '${ApiConfig.baseUrl}/compras/',
-                            );
+                          final CreateOrderUseCase useCase = GetIt.I
+                              .get<CreateOrderUseCase>();
+                          final Result<OrderEntity> result = await useCase(
+                            CartService.instance.toOrderProductosPayload(),
+                          );
 
-                            final http.Response res = await http.post(
-                              url,
-                              headers: <String, String>{
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json',
-                                if (token != null && token.isNotEmpty)
-                                  'Authorization': '$type $token',
-                              },
-                              body: jsonEncode(<String, dynamic>{
-                                'productos': CartService.instance
-                                    .toOrderProductosPayload(),
-                              }),
-                            );
+                          if (!context.mounted) return;
 
-                            if (res.statusCode >= 200 && res.statusCode < 300) {
-                              final dynamic data = jsonDecode(res.body);
-                              CartService.instance.clear();
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute<OrderPickupPage>(
-                                  builder: (_) => OrderPickupPage(
-                                    order: data as Map<String, dynamic>,
-                                  ),
+                          if (result.isSuccess) {
+                            CartService.instance.clear();
+                            final OrderEntity order = result.data!;
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute<OrderPickupPage>(
+                                builder: (_) => OrderPickupPage(
+                                  order:
+                                      order.raw ??
+                                      <String, dynamic>{
+                                        'id': order.id,
+                                        'total': order.total,
+                                        'estado': order.status,
+                                        'fecha_hora': order.placedAt,
+                                        'fecha_listo': order.readyAt ?? '',
+                                        'fecha_entregado':
+                                            order.deliveredAt ?? '',
+                                        if (order.qr != null) 'qr': order.qr,
+                                      },
                                 ),
-                              );
-                            } else {
-                              String message = 'Could not create purchase';
-                              try {
-                                final dynamic data = jsonDecode(res.body);
-                                if (data is Map && data['detail'] != null) {
-                                  message = data['detail'].toString();
-                                }
-                              } catch (_) {}
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(
-                                context,
-                              ).showSnackBar(SnackBar(content: Text(message)));
-                            }
-                          } catch (e) {
-                            if (!context.mounted) return;
+                              ),
+                            );
+                          } else {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Network error: $e')),
+                              SnackBar(content: Text(result.error!)),
                             );
                           }
                         },

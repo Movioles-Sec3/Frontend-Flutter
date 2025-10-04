@@ -1,8 +1,7 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import '../config/api_config.dart';
+import 'package:get_it/get_it.dart';
+import '../core/result.dart';
+import '../domain/usecases/register_usecase.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -33,54 +32,30 @@ class _RegisterPageState extends State<RegisterPage> {
       _isLoading = true;
     });
 
-    final Uri url = Uri.parse('${ApiConfig.baseUrl}/usuarios/');
-    final Map<String, String> payload = <String, String>{
-      'nombre': _nameController.text.trim(),
-      'email': _emailController.text.trim(),
-      'password': _passwordController.text,
-    };
+    final RegisterUseCase useCase = GetIt.I.get<RegisterUseCase>();
+    final Result<void> result = await useCase(
+      name: _nameController.text.trim(),
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+    );
 
-    try {
-      final http.Response res = await http.post(
-        url,
-        headers: <String, String>{
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode(payload),
+    if (!mounted) return;
+
+    if (result.isSuccess) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Account created successfully')),
       );
-
-      if (!mounted) return;
-
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        // Success: navigate back with result or show a snackbar
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Account created successfully')),
-        );
-        Navigator.pop(context, true);
-      } else {
-        String message = 'Registration error';
-        try {
-          final dynamic data = jsonDecode(res.body);
-          if (data is Map && data['detail'] != null) {
-            message = data['detail'].toString();
-          }
-        } catch (_) {}
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-      }
-    } catch (e) {
-      if (!mounted) return;
+      Navigator.pop(context, true);
+    } else {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Network error: $e')));
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      ).showSnackBar(SnackBar(content: Text(result.error!)));
+    }
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 

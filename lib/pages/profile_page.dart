@@ -1,10 +1,10 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-
-import '../config/api_config.dart';
+import 'package:get_it/get_it.dart';
 import '../services/session_manager.dart';
+import '../core/result.dart';
+import '../domain/entities/user.dart';
+import '../domain/usecases/get_me_usecase.dart';
+import '../domain/usecases/recharge_usecase.dart';
 import 'login_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -17,7 +17,7 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   bool _loading = true;
   String? _error;
-  Map<String, dynamic>? _user;
+  UserEntity? _user;
 
   @override
   void initState() {
@@ -31,59 +31,19 @@ class _ProfilePageState extends State<ProfilePage> {
       _error = null;
     });
 
-    final String? token = await SessionManager.getAccessToken();
-    final String tokenType = (await SessionManager.getTokenType()) ?? 'Bearer';
-    if (token == null || token.isEmpty) {
-      if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute<void>(builder: (_) => const LoginPage()),
-        (Route<dynamic> _) => false,
-      );
-      return;
-    }
+    final GetMeUseCase useCase = GetIt.I.get<GetMeUseCase>();
+    final Result<UserEntity> result = await useCase();
 
-    try {
-      final Uri url = Uri.parse('${ApiConfig.baseUrl}/usuarios/me');
-      final http.Response res = await http.get(
-        url,
-        headers: <String, String>{
-          'Authorization': '$tokenType $token',
-          'Accept': 'application/json',
-        },
-      );
+    if (!mounted) return;
 
-      if (!mounted) return;
-
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final dynamic data = jsonDecode(res.body);
-        if (data is Map<String, dynamic>) {
-          setState(() {
-            _user = data;
-            _loading = false;
-          });
-        } else {
-          setState(() {
-            _error = 'Invalid server response';
-            _loading = false;
-          });
-        }
-      } else {
-        String message = 'Could not fetch profile';
-        try {
-          final dynamic data = jsonDecode(res.body);
-          if (data is Map && data['detail'] != null) {
-            message = data['detail'].toString();
-          }
-        } catch (_) {}
-        setState(() {
-          _error = message;
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
+    if (result.isSuccess) {
       setState(() {
-        _error = 'Network error: $e';
+        _user = result.data!;
+        _loading = false;
+      });
+    } else {
+      setState(() {
+        _error = result.error;
         _loading = false;
       });
     }
@@ -140,63 +100,22 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _recharge(double amount) async {
-    try {
-      final String? token = await SessionManager.getAccessToken();
-      final String tokenType =
-          (await SessionManager.getTokenType()) ?? 'Bearer';
-      if (token == null || token.isEmpty) {
-        if (!mounted) return;
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute<void>(builder: (_) => const LoginPage()),
-          (Route<dynamic> _) => false,
-        );
-        return;
-      }
+    final RechargeUseCase useCase = GetIt.I.get<RechargeUseCase>();
+    final Result<UserEntity> result = await useCase(amount);
 
-      final Uri url = Uri.parse('${ApiConfig.baseUrl}/usuarios/me/recargar');
-      final http.Response res = await http.post(
-        url,
-        headers: <String, String>{
-          'Authorization': '$tokenType $token',
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode(<String, dynamic>{'monto': amount}),
-      );
+    if (!mounted) return;
 
-      if (!mounted) return;
-
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final dynamic data = jsonDecode(res.body);
-        if (data is Map<String, dynamic>) {
-          setState(() {
-            _user = data;
-          });
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Funds added')));
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Invalid server response')),
-          );
-        }
-      } else {
-        String message = 'Could not add funds';
-        try {
-          final dynamic data = jsonDecode(res.body);
-          if (data is Map && data['detail'] != null) {
-            message = data['detail'].toString();
-          }
-        } catch (_) {}
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-      }
-    } catch (e) {
-      if (!mounted) return;
+    if (result.isSuccess) {
+      setState(() {
+        _user = result.data!;
+      });
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Network error: $e')));
+      ).showSnackBar(const SnackBar(content: Text('Funds added')));
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(result.error!)));
     }
   }
 
@@ -220,11 +139,12 @@ class _ProfilePageState extends State<ProfilePage> {
       );
     }
 
-    final Map<String, dynamic> user = _user ?? <String, dynamic>{};
-    final String nombre = (user['nombre'] ?? '').toString();
-    final String email = (user['email'] ?? '').toString();
-    final String id = (user['id'] ?? '').toString();
-    final String saldo = (user['saldo'] ?? '').toString();
+    final UserEntity user =
+        _user ?? UserEntity(id: 0, name: '', email: '', balance: 0);
+    final String nombre = user.name;
+    final String email = user.email;
+    final String id = user.id.toString();
+    final String saldo = user.balance.toString();
 
     return SafeArea(
       child: SingleChildScrollView(

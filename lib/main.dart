@@ -6,8 +6,10 @@ import 'pages/home_page.dart';
 import 'services/cart_service.dart';
 import 'pages/profile_page.dart';
 import 'pages/orders_page.dart';
+import 'di/injector.dart';
 
 void main() {
+  setupDependencies();
   runApp(const MyApp());
 }
 
@@ -185,10 +187,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => OrderSummaryPage(
-                                  items: items,
-                                  taxRate: 0.10, // 10% (ajústalo)
-                                ),
+                                builder: (_) => OrderSummaryPage(items: items),
                               ),
                             );
                           },
