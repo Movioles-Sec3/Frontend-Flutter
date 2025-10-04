@@ -73,10 +73,38 @@ class _OrderPickupPageState extends State<OrderPickupPage>
   @override
   Widget build(BuildContext context) {
     final order = widget.order;
-    final qrData = jsonEncode(order);
+    final String? qrHash = order['qr'] is Map
+        ? (order['qr']['codigo_qr_hash']?.toString())
+        : null;
+    final String qrData = (qrHash != null && qrHash.isNotEmpty)
+        ? qrHash
+        : jsonEncode(order);
     final orderId = order['id']?.toString() ?? '—';
     final total = (order['total'] ?? 0.0) as num;
     final nf = NumberFormat.simpleCurrency();
+    final String placedIso = (order['fecha_hora'] ?? '').toString();
+    String placedAt;
+    try {
+      placedAt = DateFormat(
+        'yyyy-MM-dd HH:mm',
+      ).format(DateTime.parse(placedIso).toLocal());
+    } catch (_) {
+      placedAt = placedIso.isEmpty ? '—' : placedIso;
+    }
+
+    // Compute delivered wait (time between ready and delivered) if available
+    Duration? deliveredWait;
+    try {
+      final String readyIso = (order['fecha_listo'] ?? '').toString();
+      final String deliveredIso = (order['fecha_entregado'] ?? '').toString();
+      if (readyIso.isNotEmpty && deliveredIso.isNotEmpty) {
+        final DateTime ready = DateTime.parse(readyIso).toLocal();
+        final DateTime delivered = DateTime.parse(deliveredIso).toLocal();
+        if (delivered.isAfter(ready)) {
+          deliveredWait = delivered.difference(ready);
+        }
+      }
+    } catch (_) {}
     final brightness = MediaQuery.of(context).platformBrightness;
     final isDarkMode = brightness == Brightness.dark;
     final backgroundColor = isDarkMode ? Colors.black : const Color(0xFFFFF5F0);
@@ -185,11 +213,24 @@ class _OrderPickupPageState extends State<OrderPickupPage>
             ),
             const SizedBox(height: 8),
             Text(
-              'Placed at: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
+              'Placed at: $placedAt',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: infoTextColor.withOpacity(0.85),
               ),
             ),
+            if (deliveredWait != null) ...<Widget>[
+              const SizedBox(height: 8),
+              Text(
+                'Delivered wait: '
+                '${deliveredWait.inMinutes.remainder(60).toString().padLeft(2, '0')}'
+                'm '
+                '${(deliveredWait.inSeconds.remainder(60)).toString().padLeft(2, '0')}'
+                's',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: infoTextColor.withOpacity(0.85),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
 
             FilledButton.icon(
