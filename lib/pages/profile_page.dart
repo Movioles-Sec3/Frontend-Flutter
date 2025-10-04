@@ -63,12 +63,12 @@ class _ProfilePageState extends State<ProfilePage> {
           });
         } else {
           setState(() {
-            _error = 'Respuesta inválida del servidor';
+            _error = 'Invalid server response';
             _loading = false;
           });
         }
       } else {
-        String message = 'No se pudo obtener el perfil';
+        String message = 'Could not fetch profile';
         try {
           final dynamic data = jsonDecode(res.body);
           if (data is Map && data['detail'] != null) {
@@ -83,7 +83,7 @@ class _ProfilePageState extends State<ProfilePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Error de red: $e';
+        _error = 'Network error: $e';
         _loading = false;
       });
     }
@@ -96,6 +96,108 @@ class _ProfilePageState extends State<ProfilePage> {
       MaterialPageRoute<void>(builder: (_) => const LoginPage()),
       (Route<dynamic> _) => false,
     );
+  }
+
+  Future<void> _showRechargeDialog() async {
+    final TextEditingController amountCtrl = TextEditingController();
+    final double? amount = await showDialog<double>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Add funds'),
+          content: TextField(
+            controller: amountCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(hintText: 'Amount'),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final String raw = amountCtrl.text.trim().replaceAll(',', '.');
+                final double? parsed = double.tryParse(raw);
+                if (parsed == null || parsed <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Enter a valid amount')),
+                  );
+                  return;
+                }
+                Navigator.of(context).pop(parsed);
+              },
+              child: const Text('Add funds'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (amount != null) {
+      await _recharge(amount);
+    }
+  }
+
+  Future<void> _recharge(double amount) async {
+    try {
+      final String? token = await SessionManager.getAccessToken();
+      final String tokenType =
+          (await SessionManager.getTokenType()) ?? 'Bearer';
+      if (token == null || token.isEmpty) {
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute<void>(builder: (_) => const LoginPage()),
+          (Route<dynamic> _) => false,
+        );
+        return;
+      }
+
+      final Uri url = Uri.parse('${ApiConfig.baseUrl}/usuarios/me/recargar');
+      final http.Response res = await http.post(
+        url,
+        headers: <String, String>{
+          'Authorization': '$tokenType $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(<String, dynamic>{'monto': amount}),
+      );
+
+      if (!mounted) return;
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final dynamic data = jsonDecode(res.body);
+        if (data is Map<String, dynamic>) {
+          setState(() {
+            _user = data;
+          });
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Funds added')));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invalid server response')),
+          );
+        }
+      } else {
+        String message = 'Could not add funds';
+        try {
+          final dynamic data = jsonDecode(res.body);
+          if (data is Map && data['detail'] != null) {
+            message = data['detail'].toString();
+          }
+        } catch (_) {}
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Network error: $e')));
+    }
   }
 
   @override
@@ -112,7 +214,7 @@ class _ProfilePageState extends State<ProfilePage> {
           children: <Widget>[
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            ElevatedButton(onPressed: _load, child: const Text('Reintentar')),
+            ElevatedButton(onPressed: _load, child: const Text('Retry')),
           ],
         ),
       );
@@ -143,7 +245,7 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 16),
             Center(
               child: Text(
-                nombre.isEmpty ? 'Usuario' : nombre,
+                nombre.isEmpty ? 'User' : nombre,
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
@@ -165,7 +267,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(Icons.account_balance_wallet_outlined),
-                    title: const Text('Saldo'),
+                    title: const Text('Balance'),
                     subtitle: Text(saldo),
                   ),
                 ],
@@ -175,13 +277,22 @@ class _ProfilePageState extends State<ProfilePage> {
             SizedBox(
               height: 48,
               child: ElevatedButton.icon(
+                onPressed: _showRechargeDialog,
+                icon: const Icon(Icons.account_balance_wallet_outlined),
+                label: const Text('Add funds'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 48,
+              child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Theme.of(context).colorScheme.error,
                   foregroundColor: Theme.of(context).colorScheme.onError,
                 ),
                 onPressed: _logout,
                 icon: const Icon(Icons.logout),
-                label: const Text('Cerrar sesión'),
+                label: const Text('Log out'),
               ),
             ),
           ],
