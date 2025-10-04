@@ -1,6 +1,7 @@
 import 'package:get_it/get_it.dart';
 
 import '../core/api_client.dart';
+import '../core/strategies/strategy_factory.dart';
 import '../data/repositories/auth_repository_impl.dart';
 import '../data/repositories/order_repository_impl.dart';
 import '../data/repositories/product_repository_impl.dart';
@@ -19,7 +20,10 @@ import '../domain/usecases/register_usecase.dart';
 
 final GetIt injector = GetIt.instance;
 
-void setupDependencies() {
+Future<void> setupDependencies() async {
+  // Initialize strategy factory
+  await StrategyFactory.initialize();
+
   // Core
   injector.registerLazySingleton<ApiClient>(() => ApiClient());
 
@@ -59,4 +63,11 @@ void setupDependencies() {
   injector.registerFactory<RechargeUseCase>(
     () => RechargeUseCase(injector.get<UserRepository>()),
   );
+
+  // Strategy contexts
+  injector.registerLazySingleton(() => StrategyFactory.createPaymentContext());
+  injector.registerLazySingleton(() => StrategyFactory.createValidationContext());
+  injector.registerLazySingleton(() => StrategyFactory.createCacheContext());
+  injector.registerLazySingleton(() => StrategyFactory.createUIContext());
+  injector.registerLazySingleton(() => StrategyFactory.createErrorHandlingContext());
 }
