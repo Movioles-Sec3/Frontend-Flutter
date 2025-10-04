@@ -5,6 +5,7 @@ import '../core/result.dart';
 import '../domain/entities/user.dart';
 import '../domain/usecases/get_me_usecase.dart';
 import '../domain/usecases/recharge_usecase.dart';
+import '../domain/usecases/submit_seat_delivery_survey_usecase.dart';
 import 'login_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -18,6 +19,11 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _loading = true;
   String? _error;
   UserEntity? _user;
+  String? _seatDeliveryInterest;
+  double _prepImpactMinutes = 5;
+  final TextEditingController _seatDeliveryFeedbackCtrl = TextEditingController();
+  bool _surveySubmitted = false;
+  bool _surveySubmitting = false;
 
   @override
   void initState() {
@@ -47,6 +53,12 @@ class _ProfilePageState extends State<ProfilePage> {
         _loading = false;
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _seatDeliveryFeedbackCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _logout() async {
@@ -116,6 +128,77 @@ class _ProfilePageState extends State<ProfilePage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(result.error!)));
+    }
+  }
+
+  String _mapInterestToApi(String interest) {
+    switch (interest) {
+      case 'high':
+        return 'HIGH';
+      case 'medium':
+        return 'MODERATE';
+      case 'low':
+      default:
+        return 'LOW';
+    }
+  }
+
+  String _interestLabel(String interest) {
+    switch (interest) {
+      case 'high':
+        return 'High interest';
+      case 'medium':
+        return 'Moderate interest';
+      case 'low':
+      default:
+        return 'Low interest';
+    }
+  }
+
+  Future<void> _submitSeatDeliverySurvey() async {
+    if (_seatDeliveryInterest == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please pick your level of interest before submitting.')),
+      );
+      return;
+    }
+    if (_surveySubmitting) return;
+
+    setState(() {
+      _surveySubmitting = true;
+    });
+
+    final SubmitSeatDeliverySurveyUseCase useCase =
+        GetIt.I.get<SubmitSeatDeliverySurveyUseCase>();
+    final String feedback = _seatDeliveryFeedbackCtrl.text.trim();
+    final Result<void> result = await useCase(
+      interestLevel: _mapInterestToApi(_seatDeliveryInterest!),
+      extraMinutes: _prepImpactMinutes.round(),
+      comments: feedback.isEmpty ? null : feedback,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _surveySubmitting = false;
+      if (result.isSuccess) {
+        _surveySubmitted = true;
+      }
+    });
+
+    if (result.isSuccess) {
+      FocusScope.of(context).unfocus();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Thanks! ${_interestLabel(_seatDeliveryInterest!)} · Estimated impact: ${_prepImpactMinutes.toStringAsFixed(0)} min.${feedback.isEmpty ? '' : ' Feedback: $feedback'}',
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.error ?? 'Unable to submit survey')),
+      );
     }
   }
 
@@ -194,6 +277,25 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
             const SizedBox(height: 24),
+            _SeatDeliverySurveyCard(
+              interestValue: _seatDeliveryInterest,
+              onInterestChanged: (String? v) {
+                setState(() {
+                  _seatDeliveryInterest = v;
+                });
+              },
+              prepImpactMinutes: _prepImpactMinutes,
+              onImpactChanged: (double v) {
+                setState(() {
+                  _prepImpactMinutes = v;
+                });
+              },
+              feedbackController: _seatDeliveryFeedbackCtrl,
+              onSubmit: _submitSeatDeliverySurvey,
+              submitted: _surveySubmitted,
+              submitting: _surveySubmitting,
+            ),
+            const SizedBox(height: 24),
             SizedBox(
               height: 48,
               child: ElevatedButton.icon(
@@ -220,4 +322,138 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
+}
+
+class _SeatDeliverySurveyCard extends StatelessWidget {
+  const _SeatDeliverySurveyCard({
+    required this.interestValue,
+    required this.onInterestChanged,
+    required this.prepImpactMinutes,
+    required this.onImpactChanged,
+    required this.feedbackController,
+    required this.onSubmit,
+    required this.submitted,
+    required this.submitting,
+  });
+
+  final String? interestValue;
+  final ValueChanged<String?> onInterestChanged;
+  final double prepImpactMinutes;
+  final ValueChanged<double> onImpactChanged;
+  final TextEditingController feedbackController;
+  final VoidCallback onSubmit;
+  final bool submitted;
+  final bool submitting;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final List<_InterestOption> options = <_InterestOption>[
+      const _InterestOption(value: 'high', label: 'High interest', description: 'I would look for it often and place seat-delivery orders.'),
+      const _InterestOption(value: 'medium', label: 'Moderate interest', description: 'I would try it or recommend it in some situations.'),
+      const _InterestOption(value: 'low', label: 'Low interest', description: 'I probably would not use a seat-delivery option.'),
+    ];
+
+    final Widget submitIcon = submitting
+        ? const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : const Icon(Icons.poll_outlined);
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'Survey: Seat Delivery Feature',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'We are gauging interest in delivering orders directly to your seat. Tell us how valuable it would be and how it might affect prep/serving times.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'How interested are you in seat delivery?',
+              style: theme.textTheme.titleSmall,
+            ),
+            for (final _InterestOption option in options)
+              RadioListTile<String>(
+                title: Text(option.label),
+                subtitle: Text(option.description),
+                value: option.value,
+                groupValue: interestValue,
+                onChanged: submitted || submitting ? null : onInterestChanged,
+              ),
+            const SizedBox(height: 16),
+            Text(
+              'How many extra minutes do you think it would add to prep/serving?',
+              style: theme.textTheme.titleSmall,
+            ),
+            Slider(
+              value: prepImpactMinutes,
+              min: 0,
+              max: 20,
+              divisions: 20,
+              label: '${prepImpactMinutes.toStringAsFixed(0)} min',
+              onChanged: submitted || submitting ? null : onImpactChanged,
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                '${prepImpactMinutes.toStringAsFixed(0)} additional minutes',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Comments (optional)',
+              style: theme.textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: feedbackController,
+              enabled: !(submitted || submitting),
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Tell us how it should work or any concerns you have.',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: <Widget>[
+                FilledButton.icon(
+                  onPressed: submitted || submitting ? null : onSubmit,
+                  icon: submitIcon,
+                  label: Text(submitting ? 'Submitting...' : 'Submit response'),
+                ),
+                if (submitted) ...<Widget>[
+                  const SizedBox(width: 12),
+                  Chip(
+                    avatar: const Icon(Icons.check_circle_outline, size: 18),
+                    label: const Text('Response recorded'),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InterestOption {
+  const _InterestOption({required this.value, required this.label, required this.description});
+
+  final String value;
+  final String label;
+  final String description;
 }
