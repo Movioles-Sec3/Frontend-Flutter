@@ -1,12 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:http/http.dart' as http;
-
-import '../config/api_config.dart';
-import '../services/session_manager.dart';
-import 'login_page.dart';
+import 'package:get_it/get_it.dart';
+import '../core/result.dart';
+import '../domain/entities/order.dart';
+import '../domain/usecases/get_my_orders_usecase.dart';
 import 'order_pickup_page.dart';
 
 class OrdersPage extends StatefulWidget {
@@ -19,7 +16,7 @@ class OrdersPage extends StatefulWidget {
 class _OrdersPageState extends State<OrdersPage> {
   bool _loading = true;
   String? _error;
-  List<Map<String, dynamic>> _orders = <Map<String, dynamic>>[];
+  List<OrderEntity> _orders = <OrderEntity>[];
 
   @override
   void initState() {
@@ -33,59 +30,19 @@ class _OrdersPageState extends State<OrdersPage> {
       _error = null;
     });
 
-    final String? token = await SessionManager.getAccessToken();
-    final String tokenType = (await SessionManager.getTokenType()) ?? 'Bearer';
-    if (token == null || token.isEmpty) {
-      if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute<void>(builder: (_) => const LoginPage()),
-        (Route<dynamic> _) => false,
-      );
-      return;
-    }
+    final GetMyOrdersUseCase useCase = GetIt.I.get<GetMyOrdersUseCase>();
+    final Result<List<OrderEntity>> result = await useCase();
 
-    try {
-      final Uri url = Uri.parse('${ApiConfig.baseUrl}/compras/me');
-      final http.Response res = await http.get(
-        url,
-        headers: <String, String>{
-          'Authorization': '$tokenType $token',
-          'Accept': 'application/json',
-        },
-      );
+    if (!mounted) return;
 
-      if (!mounted) return;
-
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final dynamic data = jsonDecode(res.body);
-        if (data is List) {
-          setState(() {
-            _orders = data.whereType<Map<String, dynamic>>().toList();
-            _loading = false;
-          });
-        } else {
-          setState(() {
-            _error = 'Invalid server response';
-            _loading = false;
-          });
-        }
-      } else {
-        String message = 'Could not fetch orders';
-        try {
-          final dynamic data = jsonDecode(res.body);
-          if (data is Map && data['detail'] != null) {
-            message = data['detail'].toString();
-          }
-        } catch (_) {}
-        setState(() {
-          _error = message;
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
+    if (result.isSuccess) {
       setState(() {
-        _error = 'Network error: $e';
+        _orders = result.data!;
+        _loading = false;
+      });
+    } else {
+      setState(() {
+        _error = result.error;
         _loading = false;
       });
     }
@@ -146,11 +103,11 @@ class _OrdersPageState extends State<OrdersPage> {
         itemCount: _orders.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (BuildContext context, int index) {
-          final Map<String, dynamic> o = _orders[index];
-          final int id = (o['id'] as num?)?.toInt() ?? 0;
-          final num total = (o['total'] ?? 0) as num;
-          final String estado = (o['estado'] ?? '').toString();
-          final String fecha = (o['fecha_hora'] ?? '').toString();
+          final OrderEntity o = _orders[index];
+          final int id = o.id;
+          final double total = o.total;
+          final String estado = o.status;
+          final String fecha = o.placedAt;
 
           return Card(
             child: ListTile(
@@ -179,7 +136,19 @@ class _OrdersPageState extends State<OrdersPage> {
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (_) => OrderPickupPage(order: o),
+                    builder: (_) => OrderPickupPage(
+                      order:
+                          o.raw ??
+                          <String, dynamic>{
+                            'id': o.id,
+                            'total': o.total,
+                            'estado': o.status,
+                            'fecha_hora': o.placedAt,
+                            'fecha_listo': o.readyAt ?? '',
+                            'fecha_entregado': o.deliveredAt ?? '',
+                            if (o.qr != null) 'qr': o.qr,
+                          },
+                    ),
                   ),
                 );
               },

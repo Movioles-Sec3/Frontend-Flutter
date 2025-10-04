@@ -1,9 +1,8 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import '../config/api_config.dart';
+import 'package:get_it/get_it.dart';
+import '../domain/usecases/login_usecase.dart';
+import '../core/result.dart';
 import '../main.dart';
-import '../services/session_manager.dart';
 import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -39,67 +38,28 @@ class _LoginPageState extends State<LoginPage> {
       _isLoading = true;
     });
 
-    final Uri url = Uri.parse('${ApiConfig.baseUrl}/usuarios/token');
-    final Map<String, String> body = <String, String>{
-      'email': email,
-      'password': password,
-    };
+    final LoginUseCase useCase = GetIt.I.get<LoginUseCase>();
+    final Result<void> result = await useCase(email, password);
 
-    try {
-      final http.Response res = await http.post(
-        url,
-        headers: <String, String>{
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode(body),
+    if (!mounted) return;
+
+    if (result.isSuccess) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => const MyHomePage(title: 'Home'),
+        ),
       );
-
-      if (!mounted) return;
-
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final dynamic data = jsonDecode(res.body);
-        final String accessToken = data['access_token']?.toString() ?? '';
-        final String tokenType = data['token_type']?.toString() ?? 'Bearer';
-        if (accessToken.isEmpty) {
-          throw Exception('Invalid token');
-        }
-
-        await SessionManager.saveToken(
-          accessToken: accessToken,
-          tokenType: tokenType,
-        );
-
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute<void>(
-            builder: (_) => const MyHomePage(title: 'Home'),
-          ),
-        );
-      } else {
-        String message = 'Invalid credentials';
-        try {
-          final dynamic data = jsonDecode(res.body);
-          if (data is Map && data['detail'] != null) {
-            message = data['detail'].toString();
-          }
-        } catch (_) {}
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-      }
-    } catch (e) {
-      if (!mounted) return;
+    } else {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Network error: $e')));
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      ).showSnackBar(SnackBar(content: Text(result.error!)));
+    }
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 

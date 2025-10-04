@@ -1,11 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-
-import '../config/api_config.dart';
-import '../services/session_manager.dart';
+import 'package:get_it/get_it.dart';
 import '../services/cart_service.dart';
+import '../core/result.dart';
+import '../domain/entities/product.dart';
+import '../domain/usecases/get_products_by_category_usecase.dart';
 
 class ProductsByCategoryPage extends StatefulWidget {
   const ProductsByCategoryPage({
@@ -24,7 +22,7 @@ class ProductsByCategoryPage extends StatefulWidget {
 class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
   bool _loading = true;
   String? _error;
-  List<Map<String, dynamic>> _products = <Map<String, dynamic>>[];
+  List<ProductEntity> _products = <ProductEntity>[];
 
   @override
   void initState() {
@@ -38,64 +36,20 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
       _error = null;
     });
 
-    try {
-      // If endpoint requires auth, attach token; if public, it will be ignored by backend
-      final String? token = await SessionManager.getAccessToken();
-      final String tokenType =
-          (await SessionManager.getTokenType()) ?? 'Bearer';
+    final GetProductsByCategoryUseCase useCase = GetIt.I
+        .get<GetProductsByCategoryUseCase>();
+    final Result<List<ProductEntity>> result = await useCase(widget.categoryId);
 
-      final Uri url = Uri.parse('${ApiConfig.baseUrl}/productos/');
-      final http.Response res = await http.get(
-        url,
-        headers: <String, String>{
-          if (token != null && token.isNotEmpty)
-            'Authorization': '$tokenType $token',
-          'Accept': 'application/json',
-        },
-      );
+    if (!mounted) return;
 
-      if (!mounted) return;
-
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final dynamic data = jsonDecode(res.body);
-        if (data is List) {
-          final List<Map<String, dynamic>> all = data
-              .whereType<Map<String, dynamic>>()
-              .map((Map<String, dynamic> e) => e)
-              .toList();
-          final List<Map<String, dynamic>> filtered = all
-              .where(
-                (Map<String, dynamic> p) =>
-                    (p['id_tipo'] as num?)?.toInt() == widget.categoryId,
-              )
-              .toList();
-          setState(() {
-            _products = filtered;
-            _loading = false;
-          });
-        } else {
-          setState(() {
-            _error = 'Invalid server response';
-            _loading = false;
-          });
-        }
-      } else {
-        String message = 'Could not fetch products';
-        try {
-          final dynamic data = jsonDecode(res.body);
-          if (data is Map && data['detail'] != null) {
-            message = data['detail'].toString();
-          }
-        } catch (_) {}
-        setState(() {
-          _error = message;
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
+    if (result.isSuccess) {
       setState(() {
-        _error = 'Network error: $e';
+        _products = result.data!;
+        _loading = false;
+      });
+    } else {
+      setState(() {
+        _error = result.error;
         _loading = false;
       });
     }
@@ -136,12 +90,12 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
       itemCount: _products.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (BuildContext context, int index) {
-        final Map<String, dynamic> p = _products[index];
-        final String nombre = (p['nombre'] ?? '').toString();
-        final String descripcion = (p['descripcion'] ?? '').toString();
-        final String imagenUrl = (p['imagen_url'] ?? '').toString();
-        final num precio = (p['precio'] ?? 0) as num;
-        final bool disponible = (p['disponible'] ?? true) as bool;
+        final ProductEntity p = _products[index];
+        final String nombre = p.name;
+        final String descripcion = p.description;
+        final String imagenUrl = p.imageUrl;
+        final double precio = p.price;
+        final bool disponible = p.available;
 
         return Card(
           clipBehavior: Clip.antiAlias,
@@ -193,10 +147,10 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
                             onPressed: disponible
                                 ? () {
                                     CartService.instance.addOrIncrement(
-                                      productId: (p['id'] as num).toInt(),
+                                      productId: p.id,
                                       name: nombre,
                                       imageUrl: imagenUrl,
-                                      unitPrice: (precio).toDouble(),
+                                      unitPrice: precio,
                                     );
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
