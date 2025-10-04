@@ -3,6 +3,7 @@ import 'package:flutter_tapandtoast/pages/login_page.dart';
 import 'package:flutter_tapandtoast/pages/order_summary_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'pages/home_page.dart';
+import 'pages/profile_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -161,7 +162,7 @@ class _MyHomePageState extends State<MyHomePage> {
     HomePage(),
     Center(child: Text('Search')),
     Center(child: Text('Orders')),
-    Center(child: Text('Profile')),
+    ProfilePage(),
   ];
 
   void _onItemTapped(int index) {

@@ -1,9 +1,107 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 import '../main.dart';
+import '../services/session_manager.dart';
+import 'register_page.dart';
 
-
-class LoginPage extends StatelessWidget {
+class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _login() async {
+    final String email = _emailController.text.trim();
+    final String password = _passwordController.text;
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa email y contraseña')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    final Uri url = Uri.parse('${ApiConfig.baseUrl}/usuarios/token');
+    final Map<String, String> body = <String, String>{
+      'email': email,
+      'password': password,
+    };
+
+    try {
+      final http.Response res = await http.post(
+        url,
+        headers: <String, String>{
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(body),
+      );
+
+      if (!mounted) return;
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final dynamic data = jsonDecode(res.body);
+        final String accessToken = data['access_token']?.toString() ?? '';
+        final String tokenType = data['token_type']?.toString() ?? 'Bearer';
+        if (accessToken.isEmpty) {
+          throw Exception('Token inválido');
+        }
+
+        await SessionManager.saveToken(
+          accessToken: accessToken,
+          tokenType: tokenType,
+        );
+
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => const MyHomePage(title: 'Home'),
+          ),
+        );
+      } else {
+        String message = 'Credenciales inválidas';
+        try {
+          final dynamic data = jsonDecode(res.body);
+          if (data is Map && data['detail'] != null) {
+            message = data['detail'].toString();
+          }
+        } catch (_) {}
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error de red: $e')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -15,10 +113,7 @@ class LoginPage extends StatelessWidget {
               SizedBox(
                 height: 250,
                 width: double.infinity,
-                child: Image.asset(
-                  "assets/img/login.png",
-                  fit: BoxFit.cover
-                ),
+                child: Image.asset("assets/img/login.png", fit: BoxFit.cover),
               ),
 
               const SizedBox(height: 20),
@@ -26,8 +121,8 @@ class LoginPage extends StatelessWidget {
               Text(
                 "Welcome Back",
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
 
               const SizedBox(height: 20),
@@ -37,8 +132,9 @@ class LoginPage extends StatelessWidget {
                 child: Column(
                   children: [
                     TextField(
+                      controller: _emailController,
                       decoration: InputDecoration(
-                        hintText: "Username or Email",
+                        hintText: "Email",
                         filled: true,
                         fillColor: Colors.grey.shade200,
                         border: OutlineInputBorder(
@@ -49,6 +145,7 @@ class LoginPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     TextField(
+                      controller: _passwordController,
                       obscureText: true,
                       decoration: InputDecoration(
                         hintText: "Password",
@@ -73,18 +170,22 @@ class LoginPage extends StatelessWidget {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        onPressed: () {
-                            Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const MyHomePage(title: 'Home'),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          "Login",
-                          style: TextStyle(fontSize: 16),
-                        ),
+                        onPressed: _isLoading ? null : _login,
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : const Text(
+                                "Login",
+                                style: TextStyle(fontSize: 16),
+                              ),
                       ),
                     ),
 
@@ -116,6 +217,11 @@ class LoginPage extends StatelessWidget {
                         const Text("Don't have an account? "),
                         GestureDetector(
                           onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const RegisterPage(),
+                              ),
+                            );
                           },
                           child: Text(
                             "Sign up",
@@ -150,10 +256,7 @@ class LoginPage extends StatelessWidget {
           ),
         ),
         onPressed: () {},
-        child: Text(
-          text,
-          style: const TextStyle(color: Colors.black),
-        ),
+        child: Text(text, style: const TextStyle(color: Colors.black)),
       ),
     );
   }
