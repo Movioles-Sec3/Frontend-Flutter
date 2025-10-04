@@ -8,8 +8,9 @@ import 'pages/profile_page.dart';
 import 'pages/orders_page.dart';
 import 'di/injector.dart';
 
-void main() {
-  setupDependencies();
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await setupDependencies();
   runApp(const MyApp());
 }
 
