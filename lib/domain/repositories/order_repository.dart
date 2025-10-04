@@ -6,4 +6,5 @@ abstract class OrderRepository {
   Future<Result<OrderEntity>> createOrder({
     required List<Map<String, int>> productos,
   });
+  Future<Result<List<Map<String, dynamic>>>> getOrderDetails(int orderId);
 }

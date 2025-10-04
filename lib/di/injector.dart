@@ -4,16 +4,23 @@ import '../core/api_client.dart';
 import '../core/strategies/strategy_factory.dart';
 import '../data/repositories/auth_repository_impl.dart';
 import '../data/repositories/order_repository_impl.dart';
+import '../data/repositories/price_conversion_repository_impl.dart';
 import '../data/repositories/product_repository_impl.dart';
+import '../data/repositories/recommendation_repository_impl.dart';
 import '../data/repositories/user_repository_impl.dart';
 import '../domain/repositories/auth_repository.dart';
 import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/price_conversion_repository.dart';
 import '../domain/repositories/product_repository.dart';
+import '../domain/repositories/recommendation_repository.dart';
 import '../domain/repositories/user_repository.dart';
 import '../domain/usecases/create_order_usecase.dart';
 import '../domain/usecases/get_me_usecase.dart';
 import '../domain/usecases/get_my_orders_usecase.dart';
+import '../domain/usecases/get_order_details_usecase.dart';
+import '../domain/usecases/get_product_price_conversion_usecase.dart';
 import '../domain/usecases/get_products_by_category_usecase.dart';
+import '../domain/usecases/get_recommended_products_usecase.dart';
 import '../domain/usecases/login_usecase.dart';
 import '../domain/usecases/recharge_usecase.dart';
 import '../domain/usecases/register_usecase.dart';
@@ -41,6 +48,12 @@ Future<void> setupDependencies() async {
   injector.registerLazySingleton<UserRepository>(
     () => UserRepositoryImpl(injector.get<ApiClient>()),
   );
+  injector.registerLazySingleton<RecommendationRepository>(
+    () => RecommendationRepositoryImpl(injector.get<ApiClient>()),
+  );
+  injector.registerLazySingleton<PriceConversionRepository>(
+    () => PriceConversionRepositoryImpl(injector.get<ApiClient>()),
+  );
 
   // Use cases
   injector.registerFactory<LoginUseCase>(
@@ -55,6 +68,9 @@ Future<void> setupDependencies() async {
   injector.registerFactory<GetMyOrdersUseCase>(
     () => GetMyOrdersUseCase(injector.get<OrderRepository>()),
   );
+  injector.registerFactory<GetOrderDetailsUseCase>(
+    () => GetOrderDetailsUseCase(injector.get<OrderRepository>()),
+  );
   injector.registerFactory<CreateOrderUseCase>(
     () => CreateOrderUseCase(injector.get<OrderRepository>()),
   );
@@ -63,6 +79,12 @@ Future<void> setupDependencies() async {
   );
   injector.registerFactory<RechargeUseCase>(
     () => RechargeUseCase(injector.get<UserRepository>()),
+  );
+  injector.registerFactory<GetRecommendedProductsUseCase>(
+    () => GetRecommendedProductsUseCase(injector.get<RecommendationRepository>()),
+  );
+  injector.registerFactory<GetProductPriceConversionUseCase>(
+    () => GetProductPriceConversionUseCase(injector.get<PriceConversionRepository>()),
   );
   injector.registerFactory<SubmitSeatDeliverySurveyUseCase>(
     () => SubmitSeatDeliverySurveyUseCase(injector.get<UserRepository>()),
@@ -74,4 +96,8 @@ Future<void> setupDependencies() async {
   injector.registerLazySingleton(() => StrategyFactory.createCacheContext());
   injector.registerLazySingleton(() => StrategyFactory.createUIContext());
   injector.registerLazySingleton(() => StrategyFactory.createErrorHandlingContext());
+  injector.registerLazySingleton(() => StrategyFactory.createRecommendationContext(
+    injector.get<GetRecommendedProductsUseCase>(),
+  ));
+  injector.registerLazySingleton(() => StrategyFactory.createCurrencyDisplayContext());
 }
