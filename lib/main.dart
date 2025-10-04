@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'pages/home_page.dart';
 import 'services/cart_service.dart';
 import 'pages/profile_page.dart';
+import 'pages/orders_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -143,7 +144,7 @@ class _MyHomePageState extends State<MyHomePage> {
   static const List<Widget> _pages = <Widget>[
     HomePage(),
     Center(child: Text('Search')),
-    Center(child: Text('Orders')),
+    OrdersPage(),
     ProfilePage(),
   ];
 
