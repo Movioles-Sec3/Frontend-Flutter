@@ -1,9 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:qr_flutter/qr_flutter.dart';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:screen_brightness/screen_brightness.dart';
+
+import '../config/api_config.dart';
+import '../services/session_manager.dart';
 
 class OrderPickupPage extends StatefulWidget {
   final Map<String, dynamic> order;
@@ -19,29 +25,51 @@ class _OrderPickupPageState extends State<OrderPickupPage>
   final ScreenBrightness _screenBrightness = ScreenBrightness();
   double? _originalBrightness;
   bool _hasBoostedBrightness = false;
+  late Map<String, dynamic> _order;
+  Timer? _statusTimer;
+  bool _isFetchingStatus = false;
+  String? _lastStatus;
+  String? _lastReadyTimestamp;
+  bool _readyVibrationTriggered = false;
 
   @override
   void initState() {
     super.initState();
+    _order = Map<String, dynamic>.from(widget.order);
     WidgetsBinding.instance.addObserver(this);
+    _handleOrderStatusChange();
     _boostBrightness();
+    _startOrderStatusPolling();
   }
 
   @override
   void dispose() {
+    _statusTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_restoreBrightness());
     super.dispose();
   }
 
   @override
+  void didUpdateWidget(covariant OrderPickupPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.order, widget.order)) {
+      _order = Map<String, dynamic>.from(widget.order);
+      _handleOrderStatusChange();
+    }
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _boostBrightness();
+      _startOrderStatusPolling();
     } else if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _restoreBrightness();
+      _statusTimer?.cancel();
+      _statusTimer = null;
     }
   }
 
@@ -70,9 +98,107 @@ class _OrderPickupPageState extends State<OrderPickupPage>
     }
   }
 
+  void _startOrderStatusPolling() {
+    _statusTimer?.cancel();
+    _statusTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => unawaited(_fetchLatestOrder()),
+    );
+    unawaited(_fetchLatestOrder());
+  }
+
+  Future<void> _fetchLatestOrder() async {
+    if (!mounted || _isFetchingStatus) return;
+
+    final int? orderId = (_order['id'] as num?)?.toInt();
+    if (orderId == null || orderId <= 0) return;
+
+    _isFetchingStatus = true;
+    try {
+      final String? token = await SessionManager.getAccessToken();
+      if (token == null || token.isEmpty) {
+        _statusTimer?.cancel();
+        _statusTimer = null;
+        return;
+      }
+
+      final String tokenType = (await SessionManager.getTokenType()) ?? 'Bearer';
+      final Uri url = Uri.parse('${ApiConfig.baseUrl}/compras/me');
+      final http.Response res = await http.get(
+        url,
+        headers: <String, String>{
+          'Authorization': '$tokenType $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final dynamic data = jsonDecode(res.body);
+        if (data is List) {
+          Map<String, dynamic>? latest;
+          for (final dynamic item in data) {
+            if (item is Map) {
+              final Map<String, dynamic> mapItem =
+                  item.map((dynamic key, dynamic value) => MapEntry(
+                        key.toString(),
+                        value,
+                      ));
+              final int? currentId = (mapItem['id'] as num?)?.toInt();
+              if (currentId == orderId) {
+                latest = mapItem;
+                break;
+              }
+            }
+          }
+          if (latest != null) {
+            _updateOrder(latest);
+          }
+        }
+      }
+    } catch (_) {
+      // ignore network errors while polling
+    } finally {
+      _isFetchingStatus = false;
+    }
+  }
+
+  void _updateOrder(Map<String, dynamic> latest) {
+    if (!mounted) return;
+    setState(() {
+      _order = Map<String, dynamic>.from(latest);
+    });
+    _handleOrderStatusChange();
+  }
+
+  void _handleOrderStatusChange() {
+    final String status = (_order['estado'] ?? '').toString();
+    final String normalizedStatus = status.toUpperCase();
+    final String readyTimestamp = (_order['fecha_listo'] ?? '').toString();
+    final bool isReady =
+        normalizedStatus == 'LISTO' || readyTimestamp.trim().isNotEmpty;
+    final bool statusChanged = _lastStatus != status;
+    final bool readyChanged = _lastReadyTimestamp != readyTimestamp;
+
+    if (isReady &&
+        normalizedStatus != 'ENTREGADO' &&
+        !_readyVibrationTriggered &&
+        (statusChanged || readyChanged || _lastStatus == null)) {
+      unawaited(HapticFeedback.vibrate());
+      _readyVibrationTriggered = true;
+    }
+
+    _lastStatus = status;
+    _lastReadyTimestamp = readyTimestamp;
+
+    if (normalizedStatus == 'ENTREGADO') {
+      _statusTimer?.cancel();
+      _statusTimer = null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final order = widget.order;
+    final Map<String, dynamic> order = _order;
     final String? qrHash = order['qr'] is Map
         ? (order['qr']['codigo_qr_hash']?.toString())
         : null;
