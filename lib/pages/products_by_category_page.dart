@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../services/session_manager.dart';
+import '../services/cart_service.dart';
 
 class ProductsByCategoryPage extends StatefulWidget {
   const ProductsByCategoryPage({
@@ -144,58 +145,88 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
 
         return Card(
           clipBehavior: Clip.antiAlias,
-          child: Row(
-            children: <Widget>[
-              SizedBox(
-                width: 110,
-                height: 90,
-                child: imagenUrl.isEmpty
-                    ? Container(
-                        color: Colors.grey[300],
-                        child: const Icon(Icons.image_outlined),
-                      )
-                    : Image.network(
-                        imagenUrl,
-                        width: 110,
-                        height: 90,
-                        fit: BoxFit.cover,
-                      ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      nombre,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      descripcion,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: <Widget>[
-                        Text(
-                          '\$${precio.toStringAsFixed(2)}',
-                          style: Theme.of(context).textTheme.titleSmall,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: <Widget>[
+                SizedBox(
+                  width: 110,
+                  height: 90,
+                  child: imagenUrl.isEmpty
+                      ? Container(
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.image_outlined),
+                        )
+                      : Image.network(
+                          imagenUrl,
+                          width: 110,
+                          height: 90,
+                          fit: BoxFit.cover,
                         ),
-                        const SizedBox(width: 8),
-                        if (!disponible)
-                          const Chip(
-                            label: Text('Unavailable'),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                      ],
-                    ),
-                  ],
                 ),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        nombre,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        descripcion,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: <Widget>[
+                          Text(
+                            '\$${precio.toStringAsFixed(2)}',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            tooltip: 'Add to cart',
+                            onPressed: disponible
+                                ? () {
+                                    CartService.instance.addOrIncrement(
+                                      productId: (p['id'] as num).toInt(),
+                                      name: nombre,
+                                      imageUrl: imagenUrl,
+                                      unitPrice: (precio).toDouble(),
+                                    );
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Added to cart'),
+                                      ),
+                                    );
+                                  }
+                                : null,
+                            icon: const Icon(Icons.add_shopping_cart_outlined),
+                          ),
+                        ],
+                      ),
+                      if (!disponible)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 4),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Chip(
+                              label: Text('Unavailable'),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },

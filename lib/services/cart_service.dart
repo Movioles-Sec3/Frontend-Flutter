@@ -26,9 +26,13 @@ class CartService extends ChangeNotifier {
 
   List<CartItemData> get items => _itemsById.values.toList(growable: false);
 
-  int get totalQuantity => _itemsById.values.fold<int>(0, (int s, CartItemData e) => s + e.quantity);
+  int get totalQuantity =>
+      _itemsById.values.fold<int>(0, (int s, CartItemData e) => s + e.quantity);
 
-  double get subtotal => _itemsById.values.fold<double>(0, (double s, CartItemData e) => s + e.lineTotal);
+  double get subtotal => _itemsById.values.fold<double>(
+    0,
+    (double s, CartItemData e) => s + e.lineTotal,
+  );
 
   void addOrIncrement({
     required int productId,
@@ -71,9 +75,12 @@ class CartService extends ChangeNotifier {
 
   List<Map<String, int>> toOrderProductosPayload() {
     return _itemsById.values
-        .map((CartItemData e) => <String, int>{'id_producto': e.productId, 'cantidad': e.quantity})
+        .map(
+          (CartItemData e) => <String, int>{
+            'id_producto': e.productId,
+            'cantidad': e.quantity,
+          },
+        )
         .toList(growable: false);
   }
 }
-
-

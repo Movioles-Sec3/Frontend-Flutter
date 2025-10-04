@@ -3,6 +3,7 @@ import 'package:flutter_tapandtoast/pages/login_page.dart';
 import 'package:flutter_tapandtoast/pages/order_summary_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'pages/home_page.dart';
+import 'services/cart_service.dart';
 import 'pages/profile_page.dart';
 
 void main() {
@@ -137,26 +138,7 @@ class _MyHomePageState extends State<MyHomePage> {
     'Profile',
   ];
 
-  final List<CartItem> _cart = const [
-    CartItem(
-      name: 'Craft IPA Beer',
-      quantity: 2,
-      unitPrice: 5.00,
-      image: 'assets/img/beer.png',
-    ),
-    CartItem(
-      name: 'Assorted Tapas',
-      quantity: 1,
-      unitPrice: 10.00,
-      image: 'assets/img/tapas.png',
-    ),
-    CartItem(
-      name: 'Lemon Soda',
-      quantity: 3,
-      unitPrice: 1.67,
-      image: 'assets/img/soda.png',
-    ),
-  ];
+  // Legacy placeholder cart removed; using CartService instead.
 
   static const List<Widget> _pages = <Widget>[
     HomePage(),
@@ -179,20 +161,66 @@ class _MyHomePageState extends State<MyHomePage> {
         centerTitle: true,
         actions: _currentIndex == 0
             ? <Widget>[
-                IconButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => OrderSummaryPage(
-                          items: _cart,
-                          taxRate: 0.10, // 10% (ajústalo)
+                AnimatedBuilder(
+                  animation: CartService.instance,
+                  builder: (BuildContext context, Widget? _) {
+                    final int count = CartService.instance.totalQuantity;
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: <Widget>[
+                        IconButton(
+                          onPressed: () {
+                            final items = CartService.instance.items
+                                .map(
+                                  (e) => CartItem(
+                                    productId: e.productId,
+                                    name: e.name,
+                                    quantity: e.quantity,
+                                    unitPrice: e.unitPrice,
+                                    image: e.imageUrl,
+                                  ),
+                                )
+                                .toList();
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => OrderSummaryPage(
+                                  items: items,
+                                  taxRate: 0.10, // 10% (ajústalo)
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.shopping_cart_outlined),
+                          tooltip: 'Cart',
                         ),
-                      ),
+                        if (count > 0)
+                          Positioned(
+                            right: 10,
+                            top: 12,
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 18,
+                                minHeight: 18,
+                              ),
+                              child: Text(
+                                '$count',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
                     );
                   },
-                  icon: const Icon(Icons.shopping_cart_outlined),
-                  tooltip: 'Cart',
                 ),
               ]
             : null,

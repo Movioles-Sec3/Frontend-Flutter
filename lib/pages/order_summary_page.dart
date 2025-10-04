@@ -1,14 +1,21 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_tapandtoast/pages/order_pickup_page.dart';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
+import '../services/session_manager.dart';
 
 class CartItem {
+  final int productId;
   final String name;
   final int quantity;
   final double unitPrice;
   final String image; // puede ser network o asset
 
   const CartItem({
+    required this.productId,
     required this.name,
     required this.quantity,
     required this.unitPrice,
@@ -65,30 +72,62 @@ class OrderSummaryPage extends StatelessWidget {
             _RowKV(label: 'Total', value: _money(total), isBold: true),
             const SizedBox(height: 24),
             FilledButton(
-              onPressed: () {
-                final orderPayload = {
-                  'id': DateTime.now().millisecondsSinceEpoch.toString(),
-                  'total': total,
-                  'taxes': taxes,
-                  'subtotal': subtotal,
-                  'items': items
-                      .map(
-                        (e) => {
-                          'name': e.name,
-                          'qty': e.quantity,
-                          'unitPrice': e.unitPrice,
-                        },
-                      )
-                      .toList(),
-                  'ts': DateTime.now().toIso8601String(),
-                };
+              onPressed: () async {
+                try {
+                  final String? token = await SessionManager.getAccessToken();
+                  final String type =
+                      (await SessionManager.getTokenType()) ?? 'Bearer';
+                  final Uri url = Uri.parse('${ApiConfig.baseUrl}/compras/');
 
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => OrderPickupPage(order: orderPayload),
-                  ),
-                );
+                  final http.Response res = await http.post(
+                    url,
+                    headers: <String, String>{
+                      'Content-Type': 'application/json',
+                      'Accept': 'application/json',
+                      if (token != null && token.isNotEmpty)
+                        'Authorization': '$type $token',
+                    },
+                    body: jsonEncode(<String, dynamic>{
+                      'productos': items
+                          .map(
+                            (CartItem e) => <String, int>{
+                              'id_producto': e.productId,
+                              'cantidad': e.quantity,
+                            },
+                          )
+                          .toList(),
+                    }),
+                  );
+
+                  if (res.statusCode >= 200 && res.statusCode < 300) {
+                    final dynamic data = jsonDecode(res.body);
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute<OrderPickupPage>(
+                        builder: (_) => OrderPickupPage(
+                          order: data as Map<String, dynamic>,
+                        ),
+                      ),
+                    );
+                  } else {
+                    String message = 'No se pudo crear la compra';
+                    try {
+                      final dynamic data = jsonDecode(res.body);
+                      if (data is Map && data['detail'] != null) {
+                        message = data['detail'].toString();
+                      }
+                    } catch (_) {}
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(message)));
+                  }
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error de red: $e')));
+                }
               },
               child: const Text('Confirm Order'),
             ),
