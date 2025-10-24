@@ -1,6 +1,11 @@
+import 'dart:typed_data' show Uint8List;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:get_it/get_it.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/session_manager.dart';
+import '../services/profile_photo_service.dart';
 import '../core/result.dart';
 import '../domain/entities/user.dart';
 import '../domain/usecases/get_me_usecase.dart';
@@ -24,11 +29,24 @@ class _ProfilePageState extends State<ProfilePage> {
   final TextEditingController _seatDeliveryFeedbackCtrl = TextEditingController();
   bool _surveySubmitted = false;
   bool _surveySubmitting = false;
+  final ImagePicker _imagePicker = ImagePicker();
+  late final ProfilePhotoService _photoService;
+  Uint8List? _profilePhotoBytes;
 
   @override
   void initState() {
     super.initState();
+    _photoService = ProfilePhotoService.instance;
+    _profilePhotoBytes = _photoService.photoBytes;
+    _photoService.addListener(_handlePhotoChange);
     _load();
+  }
+
+  void _handlePhotoChange() {
+    if (!mounted) return;
+    setState(() {
+      _profilePhotoBytes = _photoService.photoBytes;
+    });
   }
 
   Future<void> _load() async {
@@ -55,14 +73,46 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _captureProfilePhoto() async {
+    try {
+      final XFile? photo = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.front,
+        imageQuality: 85,
+        maxWidth: 720,
+        maxHeight: 720,
+      );
+      if (photo == null) return;
+
+      final Uint8List bytes = await photo.readAsBytes();
+      _photoService.update(bytes);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile photo updated')),
+      );
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to open the camera: ${e.message ?? e.code}')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not capture photo')),
+      );
+    }
+  }
+
   @override
   void dispose() {
+    _photoService.removeListener(_handlePhotoChange);
     _seatDeliveryFeedbackCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _logout() async {
     await SessionManager.clear();
+    _photoService.clear();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const LoginPage()),
@@ -235,14 +285,11 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            CircleAvatar(
-              radius: 40,
-              child: Text(
-                nombre.isNotEmpty ? nombre[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
+            Center(
+              child: _ProfileAvatar(
+                displayName: nombre,
+                photoBytes: _profilePhotoBytes,
+                onCaptureTap: _captureProfilePhoto,
               ),
             ),
             const SizedBox(height: 16),
@@ -319,6 +366,70 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ProfileAvatar extends StatelessWidget {
+  const _ProfileAvatar({
+    required this.displayName,
+    required this.photoBytes,
+    required this.onCaptureTap,
+  });
+
+  final String displayName;
+  final Uint8List? photoBytes;
+  final VoidCallback onCaptureTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ImageProvider<Object>? imageProvider =
+        photoBytes == null ? null : MemoryImage(photoBytes!);
+
+    return SizedBox(
+      width: 112,
+      height: 112,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          Positioned.fill(
+            child: CircleAvatar(
+              radius: 56,
+              backgroundImage: imageProvider,
+              child: imageProvider != null
+                  ? null
+                  : Text(
+                      displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+            ),
+          ),
+          Positioned(
+            bottom: 0,
+            right: 0,
+            child: Material(
+              color: theme.colorScheme.primary,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onCaptureTap,
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Icon(
+                    Icons.camera_alt_outlined,
+                    size: 18,
+                    color: theme.colorScheme.onPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
