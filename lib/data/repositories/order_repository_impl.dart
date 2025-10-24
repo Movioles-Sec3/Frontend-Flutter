@@ -39,4 +39,20 @@ class OrderRepositoryImpl implements OrderRepository {
     }
     return Result.failure('Invalid server response');
   }
+
+  @override
+  Future<Result<List<Map<String, dynamic>>>> getOrderDetails(int orderId) async {
+    final Result<dynamic> res = await _apiClient.get(
+      '/compras/$orderId/productos',
+      auth: true,
+    );
+    if (res.isFailure) return Result.failure(res.error!);
+    if (res.data is List) {
+      final List<Map<String, dynamic>> products = (res.data as List)
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      return Result.success(products);
+    }
+    return Result.failure('Invalid server response');
+  }
 }

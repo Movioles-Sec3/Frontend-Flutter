@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'categories_page.dart';
 import 'products_by_category_page.dart';
+import '../widgets/recommendations_widget.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -64,6 +65,11 @@ class HomePage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             _CategoriesList(categories: _categories),
+            const SizedBox(height: 16),
+            const RecommendationsWidget(
+              title: 'Recommended for You',
+              limit: 5,
+            ),
             const SizedBox(height: 16),
             _SectionHeader(title: 'Near Me'),
             const SizedBox(height: 8),

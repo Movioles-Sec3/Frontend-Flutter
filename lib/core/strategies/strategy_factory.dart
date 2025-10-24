@@ -1,8 +1,11 @@
 import 'package:flutter_tapandtoast/core/strategies/strategy.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../domain/usecases/get_recommended_products_usecase.dart';
 import 'caching_strategy.dart';
+import 'currency_strategy.dart';
 import 'error_handling_strategy.dart';
 import 'payment_strategy.dart';
+import 'recommendation_strategy.dart';
 import 'ui_strategy.dart';
 import 'validation_strategy.dart';
 
@@ -29,6 +32,12 @@ class StrategyFactory {
 
     // Initialize error handling strategies
     _initializeErrorHandlingStrategies();
+
+    // Initialize recommendation strategies
+    _initializeRecommendationStrategies();
+
+    // Initialize currency strategies
+    _initializeCurrencyStrategies();
 
     _initialized = true;
   }
@@ -124,6 +133,29 @@ class StrategyFactory {
     );
   }
 
+  /// Initialize recommendation strategies
+  static void _initializeRecommendationStrategies() {
+    // Note: Recommendation strategies will be registered in createRecommendationContext
+    // because they need the use case dependency
+  }
+
+  /// Initialize currency strategies
+  static void _initializeCurrencyStrategies() {
+    // Register currency display strategies
+    StrategyFactory.register<CurrencyDisplayRequest, CurrencyDisplayResult>(
+      AllCurrenciesDisplayStrategy(),
+    );
+    StrategyFactory.register<CurrencyDisplayRequest, CurrencyDisplayResult>(
+      PreferredCurrenciesDisplayStrategy(),
+    );
+    StrategyFactory.register<CurrencyDisplayRequest, CurrencyDisplayResult>(
+      InternationalFocusDisplayStrategy(),
+    );
+    StrategyFactory.register<CurrencyDisplayRequest, CurrencyDisplayResult>(
+      CompactDisplayStrategy(),
+    );
+  }
+
   /// Create payment context
   static PaymentContext createPaymentContext() {
     final strategies = StrategyFactory.getStrategies<PaymentData, PaymentResult>()
@@ -189,6 +221,35 @@ class StrategyFactory {
       defaultStrategy: strategies.firstWhere(
         (s) => s.identifier == 'default',
         orElse: () => DefaultErrorHandlingStrategy(),
+      ),
+      strategies: strategies,
+    );
+  }
+
+  /// Create recommendation context
+  static RecommendationContext createRecommendationContext(GetRecommendedProductsUseCase useCase) {
+    final popularityStrategy = PopularityRecommendationStrategy(useCase);
+    final categoryStrategy = CategoryRecommendationStrategy(useCase);
+    final mixedStrategy = MixedRecommendationStrategy(
+      popularityStrategy: popularityStrategy,
+      categoryStrategy: categoryStrategy,
+    );
+
+    return RecommendationContext(
+      defaultStrategy: popularityStrategy,
+      strategies: [popularityStrategy, categoryStrategy, mixedStrategy],
+    );
+  }
+
+  /// Create currency display context
+  static CurrencyDisplayContext createCurrencyDisplayContext() {
+    final strategies = StrategyFactory.getStrategies<CurrencyDisplayRequest, CurrencyDisplayResult>()
+        .cast<CurrencyDisplayStrategy>();
+    
+    return CurrencyDisplayContext(
+      defaultStrategy: strategies.firstWhere(
+        (s) => s.identifier == 'international_focus',
+        orElse: () => InternationalFocusDisplayStrategy(),
       ),
       strategies: strategies,
     );
