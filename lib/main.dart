@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_tapandtoast/pages/login_page.dart';
 import 'package:flutter_tapandtoast/pages/order_summary_page.dart';
@@ -14,8 +16,62 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late ThemeMode _themeMode;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _themeMode = _resolveThemeMode();
+    _scheduleThemeUpdate();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  ThemeMode _resolveThemeMode() {
+    final hour = DateTime.now().hour;
+    final isNight = hour >= 19 || hour < 7;
+    return isNight ? ThemeMode.dark : ThemeMode.light;
+  }
+
+  void _scheduleThemeUpdate() {
+    _timer?.cancel();
+    final now = DateTime.now();
+    final bool currentlyDark = _themeMode == ThemeMode.dark;
+
+    DateTime nextChange;
+    if (currentlyDark) {
+      final nextMorning = DateTime(now.year, now.month, now.day, 7);
+      nextChange = now.isBefore(nextMorning)
+          ? nextMorning
+          : nextMorning.add(const Duration(days: 1));
+    } else {
+      final nextEvening = DateTime(now.year, now.month, now.day, 19);
+      nextChange = now.isBefore(nextEvening)
+          ? nextEvening
+          : nextEvening.add(const Duration(days: 1));
+    }
+
+    final durationUntilChange = nextChange.difference(now);
+    _timer = Timer(durationUntilChange, () {
+      setState(() {
+        _themeMode = _resolveThemeMode();
+      });
+      _scheduleThemeUpdate();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -108,7 +164,7 @@ class MyApp extends StatelessWidget {
       title: 'TapAndToast',
       theme: lightTheme,
       darkTheme: darkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: _themeMode,
       home: const LoginPage(),
     );
   }
