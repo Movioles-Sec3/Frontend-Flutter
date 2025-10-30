@@ -4,6 +4,8 @@ import '../services/cart_service.dart';
 import '../core/result.dart';
 import '../domain/entities/product.dart';
 import '../domain/usecases/get_products_by_category_usecase.dart';
+import '../core/strategies/error_handling_strategy.dart';
+import '../di/injector.dart';
 
 class ProductsByCategoryPage extends StatefulWidget {
   const ProductsByCategoryPage({
@@ -23,10 +25,12 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
   bool _loading = true;
   String? _error;
   List<ProductEntity> _products = <ProductEntity>[];
+  late final ErrorHandlingContext _errorHandlingContext;
 
   @override
   void initState() {
     super.initState();
+    _errorHandlingContext = injector.get<ErrorHandlingContext>();
     _load();
   }
 
@@ -36,20 +40,44 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
       _error = null;
     });
 
-    final GetProductsByCategoryUseCase useCase = GetIt.I
-        .get<GetProductsByCategoryUseCase>();
-    final Result<List<ProductEntity>> result = await useCase(widget.categoryId);
+    try {
+      final GetProductsByCategoryUseCase useCase = GetIt.I
+          .get<GetProductsByCategoryUseCase>();
+      final Result<List<ProductEntity>> result = await useCase(
+        widget.categoryId,
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (result.isSuccess) {
+      if (result.isSuccess) {
+        setState(() {
+          _products = result.data!;
+          _loading = false;
+        });
+      } else {
+        String friendly = result.error ?? 'Unable to load products';
+        try {
+          final handled = await _errorHandlingContext.handleError(
+            Exception(result.error ?? 'Unknown error'),
+          );
+          friendly = handled.userMessage;
+        } catch (_) {}
+        setState(() {
+          _error = friendly;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      String friendly = 'Unable to load products';
+      try {
+        final handled = await _errorHandlingContext.handleError(
+          e is Exception ? e : Exception(e.toString()),
+        );
+        friendly = handled.userMessage;
+      } catch (_) {}
       setState(() {
-        _products = result.data!;
-        _loading = false;
-      });
-    } else {
-      setState(() {
-        _error = result.error;
+        _error = friendly;
         _loading = false;
       });
     }
