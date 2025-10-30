@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/strategies/recommendation_strategy.dart';
+import '../core/strategies/error_handling_strategy.dart';
 import '../domain/entities/product_recommendation.dart';
 import '../di/injector.dart';
 import '../services/cart_service.dart';
@@ -25,6 +26,7 @@ class RecommendationsWidget extends StatefulWidget {
 class _RecommendationsWidgetState extends State<RecommendationsWidget> {
   late final RecommendationContext _recommendationContext;
   late final CartService _cartService;
+  late final ErrorHandlingContext _errorHandlingContext;
 
   List<ProductRecommendation> _recommendations = [];
   bool _isLoading = true;
@@ -35,6 +37,7 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
     super.initState();
     _recommendationContext = injector.get<RecommendationContext>();
     _cartService = CartService.instance;
+    _errorHandlingContext = injector.get<ErrorHandlingContext>();
     _loadRecommendations();
   }
 
@@ -58,14 +61,31 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
           _isLoading = false;
         });
       } else {
+        final message = result.error;
+        String friendly = 'Failed to load recommendations';
+        if (message != null && message.isNotEmpty) {
+          try {
+            final handled = await _errorHandlingContext.handleError(
+              Exception(message),
+            );
+            friendly = handled.userMessage;
+          } catch (_) {}
+        }
         setState(() {
-          _error = result.error ?? 'Failed to load recommendations';
+          _error = friendly;
           _isLoading = false;
         });
       }
     } catch (e) {
+      String friendly = 'Error loading recommendations';
+      try {
+        final handled = await _errorHandlingContext.handleError(
+          e is Exception ? e : Exception(e.toString()),
+        );
+        friendly = handled.userMessage;
+      } catch (_) {}
       setState(() {
-        _error = 'Error loading recommendations: $e';
+        _error = friendly;
         _isLoading = false;
       });
     }
@@ -125,9 +145,7 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
     if (_isLoading) {
       return const SizedBox(
         height: 200,
-        child: Center(
-          child: CircularProgressIndicator(),
-        ),
+        child: Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -148,9 +166,7 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                ),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
               const SizedBox(height: 8),
               ElevatedButton(
@@ -171,11 +187,7 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.recommend_outlined,
-                size: 48,
-                color: Colors.grey,
-              ),
+              Icon(Icons.recommend_outlined, size: 48, color: Colors.grey),
               SizedBox(height: 8),
               Text(
                 'No recommendations available',
@@ -207,15 +219,15 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
       margin: const EdgeInsets.only(right: 12),
       child: Card(
         elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Product Image
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
               child: Container(
                 height: 120,
                 width: double.infinity,
@@ -224,11 +236,12 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
                     ? Image.network(
                         product.imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => const Icon(
-                          Icons.image_not_supported,
-                          size: 48,
-                          color: Colors.grey,
-                        ),
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(
+                              Icons.image_not_supported,
+                              size: 48,
+                              color: Colors.grey,
+                            ),
                       )
                     : const Icon(
                         Icons.image_not_supported,
@@ -237,7 +250,7 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
                       ),
               ),
             ),
-            
+
             // Product Info
             Expanded(
               child: Padding(
@@ -247,9 +260,14 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
                   children: [
                     // Product Type Badge
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -261,9 +279,9 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
                         ),
                       ),
                     ),
-                    
+
                     const SizedBox(height: 8),
-                    
+
                     // Product Name
                     Text(
                       product.name,
@@ -274,9 +292,9 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    
+
                     const SizedBox(height: 4),
-                    
+
                     // Price
                     Text(
                       '\$${product.price.toStringAsFixed(0)}',
@@ -286,14 +304,16 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
                         color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
-                    
+
                     const Spacer(),
-                    
+
                     // Add to Cart Button
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: product.available ? () => _addToCart(product) : null,
+                        onPressed: product.available
+                            ? () => _addToCart(product)
+                            : null,
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           shape: RoundedRectangleBorder(
@@ -316,4 +336,3 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
     );
   }
 }
-

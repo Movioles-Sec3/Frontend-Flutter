@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 
 class CartItemData {
   CartItemData({
@@ -23,11 +24,15 @@ class CartService extends ChangeNotifier {
   static final CartService instance = CartService._();
 
   final Map<int, CartItemData> _itemsById = <int, CartItemData>{};
+  final StreamController<int> _quantityController =
+      StreamController<int>.broadcast();
 
   List<CartItemData> get items => _itemsById.values.toList(growable: false);
 
   int get totalQuantity =>
       _itemsById.values.fold<int>(0, (int s, CartItemData e) => s + e.quantity);
+
+  Stream<int> get totalQuantityStream => _quantityController.stream;
 
   double get subtotal => _itemsById.values.fold<double>(
     0,
@@ -53,6 +58,7 @@ class CartService extends ChangeNotifier {
       );
     }
     notifyListeners();
+    _quantityController.add(totalQuantity);
   }
 
   void decrementOrRemove(int productId) {
@@ -64,6 +70,7 @@ class CartService extends ChangeNotifier {
       _itemsById.remove(productId);
     }
     notifyListeners();
+    _quantityController.add(totalQuantity);
   }
 
   int getQuantity(int productId) => _itemsById[productId]?.quantity ?? 0;
@@ -72,24 +79,28 @@ class CartService extends ChangeNotifier {
     if (quantity <= 0) {
       _itemsById.remove(productId);
       notifyListeners();
+      _quantityController.add(totalQuantity);
       return;
     }
     final CartItemData? existing = _itemsById[productId];
     if (existing != null) {
       existing.quantity = quantity;
       notifyListeners();
+      _quantityController.add(totalQuantity);
     }
   }
 
   void remove(int productId) {
     if (_itemsById.remove(productId) != null) {
       notifyListeners();
+      _quantityController.add(totalQuantity);
     }
   }
 
   void clear() {
     _itemsById.clear();
     notifyListeners();
+    _quantityController.add(totalQuantity);
   }
 
   List<Map<String, int>> toOrderProductosPayload() {
@@ -129,5 +140,6 @@ class CartService extends ChangeNotifier {
       }
     }
     notifyListeners();
+    _quantityController.add(totalQuantity);
   }
 }
