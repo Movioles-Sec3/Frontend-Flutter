@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../../core/api_client.dart';
 import '../../core/result.dart';
 import '../../domain/entities/product.dart';
@@ -24,11 +25,49 @@ class ProductRepositoryImpl implements ProductRepository {
 
   @override
   Future<Result<List<ProductEntity>>> getByCategory(int categoryId) async {
-    final Result<List<ProductEntity>> all = await getAll();
-    if (all.isFailure) return Result.failure(all.error!);
-    final List<ProductEntity> filtered = all.data!
-        .where((ProductEntity p) => p.typeId == categoryId)
-        .toList();
-    return Result.success(filtered);
+    try {
+      // Fetch raw list to allow isolate processing
+      final Result<dynamic> res = await _apiClient.get(
+        '/productos/',
+        auth: true,
+      );
+      if (res.isFailure) return Result.failure(res.error!);
+      if (res.data is! List) return Result.failure('Invalid server response');
+
+      // Use background isolate to filter by category on large datasets
+      final List<dynamic> rawList = res.data as List<dynamic>;
+      final List<Map<String, dynamic>> filteredJson = await compute(
+        _filterProductJsonByCategory,
+        <String, dynamic>{'list': rawList, 'categoryId': categoryId},
+      );
+
+      final List<ProductEntity> filtered = filteredJson
+          .map(ProductEntity.fromJson)
+          .toList(growable: false);
+
+      return Result.success(filtered);
+    } catch (e) {
+      return Result.failure('Unable to filter products: $e');
+    }
   }
+}
+
+/// Top-level function for compute to run in an isolate
+List<Map<String, dynamic>> _filterProductJsonByCategory(
+  Map<String, dynamic> args,
+) {
+  final List<dynamic> list = args['list'] as List<dynamic>? ?? <dynamic>[];
+  final int categoryId = (args['categoryId'] as num?)?.toInt() ?? -1;
+
+  if (categoryId <= 0) return <Map<String, dynamic>>[];
+
+  final Iterable<Map<String, dynamic>> maps = list
+      .whereType<Map<String, dynamic>>();
+  final List<Map<String, dynamic>> filtered = maps
+      .where(
+        (Map<String, dynamic> m) =>
+            ((m['id_tipo'] as num?)?.toInt() ?? -1) == categoryId,
+      )
+      .toList(growable: false);
+  return filtered;
 }

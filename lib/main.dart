@@ -221,10 +221,11 @@ class _MyHomePageState extends State<MyHomePage> {
         centerTitle: true,
         actions: _currentIndex == 0
             ? <Widget>[
-                AnimatedBuilder(
-                  animation: CartService.instance,
-                  builder: (BuildContext context, Widget? _) {
-                    final int count = CartService.instance.totalQuantity;
+                StreamBuilder<int>(
+                  initialData: CartService.instance.totalQuantity,
+                  stream: CartService.instance.totalQuantityStream,
+                  builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
+                    final int count = snapshot.data ?? 0;
                     return Stack(
                       alignment: Alignment.center,
                       children: <Widget>[

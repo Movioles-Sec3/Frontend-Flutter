@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 
 class CartItemData {
   CartItemData({
@@ -23,11 +24,15 @@ class CartService extends ChangeNotifier {
   static final CartService instance = CartService._();
 
   final Map<int, CartItemData> _itemsById = <int, CartItemData>{};
+  final StreamController<int> _quantityController =
+      StreamController<int>.broadcast();
 
   List<CartItemData> get items => _itemsById.values.toList(growable: false);
 
   int get totalQuantity =>
       _itemsById.values.fold<int>(0, (int s, CartItemData e) => s + e.quantity);
+
+  Stream<int> get totalQuantityStream => _quantityController.stream;
 
   double get subtotal => _itemsById.values.fold<double>(
     0,
@@ -53,6 +58,7 @@ class CartService extends ChangeNotifier {
       );
     }
     notifyListeners();
+    _quantityController.add(totalQuantity);
   }
 
   void decrementOrRemove(int productId) {
@@ -64,6 +70,7 @@ class CartService extends ChangeNotifier {
       _itemsById.remove(productId);
     }
     notifyListeners();
+    _quantityController.add(totalQuantity);
   }
 
   int getQuantity(int productId) => _itemsById[productId]?.quantity ?? 0;
@@ -72,24 +79,28 @@ class CartService extends ChangeNotifier {
     if (quantity <= 0) {
       _itemsById.remove(productId);
       notifyListeners();
+      _quantityController.add(totalQuantity);
       return;
     }
     final CartItemData? existing = _itemsById[productId];
     if (existing != null) {
       existing.quantity = quantity;
       notifyListeners();
+      _quantityController.add(totalQuantity);
     }
   }
 
   void remove(int productId) {
     if (_itemsById.remove(productId) != null) {
       notifyListeners();
+      _quantityController.add(totalQuantity);
     }
   }
 
   void clear() {
     _itemsById.clear();
     notifyListeners();
+    _quantityController.add(totalQuantity);
   }
 
   List<Map<String, int>> toOrderProductosPayload() {
@@ -101,5 +112,34 @@ class CartService extends ChangeNotifier {
           },
         )
         .toList(growable: false);
+  }
+
+  /// Adds all products from a previous order to the cart
+  void reorderFromOrder(List<Map<String, dynamic>> orderProducts) {
+    for (final Map<String, dynamic> product in orderProducts) {
+      final int productId = (product['id_producto'] as num?)?.toInt() ?? 0;
+      final int quantity = (product['cantidad'] as num?)?.toInt() ?? 0;
+      final String name = (product['nombre'] ?? '').toString();
+      final String imageUrl = (product['imagen_url'] ?? '').toString();
+      final double unitPrice = ((product['precio'] ?? 0) as num).toDouble();
+
+      if (productId > 0 && quantity > 0) {
+        // Add or update the product in cart
+        final CartItemData? existing = _itemsById[productId];
+        if (existing != null) {
+          existing.quantity += quantity;
+        } else {
+          _itemsById[productId] = CartItemData(
+            productId: productId,
+            name: name,
+            imageUrl: imageUrl,
+            unitPrice: unitPrice,
+            quantity: quantity,
+          );
+        }
+      }
+    }
+    notifyListeners();
+    _quantityController.add(totalQuantity);
   }
 }
