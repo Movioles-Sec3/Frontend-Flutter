@@ -1,3 +1,4 @@
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:get_it/get_it.dart';
 
 import '../core/api_client.dart';
@@ -25,10 +26,15 @@ import '../domain/usecases/login_usecase.dart';
 import '../domain/usecases/recharge_usecase.dart';
 import '../domain/usecases/register_usecase.dart';
 import '../domain/usecases/submit_seat_delivery_survey_usecase.dart';
+import '../services/session_manager.dart';
 
 final GetIt injector = GetIt.instance;
 
 Future<void> setupDependencies() async {
+  // Initialize secure storage for session handling
+  await Hive.initFlutter();
+  await Hive.openBox<String>(SessionManager.boxName);
+
   // Initialize strategy factory
   await StrategyFactory.initialize();
 
@@ -92,7 +98,9 @@ Future<void> setupDependencies() async {
 
   // Strategy contexts
   injector.registerLazySingleton(() => StrategyFactory.createPaymentContext());
-  injector.registerLazySingleton(() => StrategyFactory.createValidationContext());
+  injector.registerLazySingleton(
+    () => StrategyFactory.createValidationContext(),
+  );
   injector.registerLazySingleton(() => StrategyFactory.createCacheContext());
   injector.registerLazySingleton(() => StrategyFactory.createUIContext());
   injector.registerLazySingleton(() => StrategyFactory.createErrorHandlingContext());
