@@ -51,9 +51,7 @@ class StrategyFactory {
     StrategyFactory.register<PaymentData, PaymentResult>(
       PayPalPaymentStrategy(),
     );
-    StrategyFactory.register<PaymentData, PaymentResult>(
-      CashPaymentStrategy(),
-    );
+    StrategyFactory.register<PaymentData, PaymentResult>(CashPaymentStrategy());
   }
 
   /// Initialize validation strategies
@@ -69,7 +67,9 @@ class StrategyFactory {
       AsyncValidationStrategy<String>(PhoneValidationStrategy()),
     );
     StrategyFactory.register<dynamic, ValidationResult>(
-      AsyncValidationStrategy<Map<String, dynamic>>(UserRegistrationValidationStrategy()),
+      AsyncValidationStrategy<Map<String, dynamic>>(
+        UserRegistrationValidationStrategy(),
+      ),
     );
   }
 
@@ -84,7 +84,14 @@ class StrategyFactory {
     StrategyFactory.register<String, CacheResult<String>>(
       LruMemoryCachingStrategy<String>(
         maxEntries: 256,
-        keyPrefixes: const <String>['orders:', 'order:'],
+        keyPrefixes: const <String>[
+          'orders:',
+          'order:',
+          'home:',
+          'categories:',
+          'category:',
+          'products:',
+        ],
       ),
     );
     StrategyFactory.register<String, CacheResult<String>>(
@@ -169,9 +176,10 @@ class StrategyFactory {
 
   /// Create payment context
   static PaymentContext createPaymentContext() {
-    final strategies = StrategyFactory.getStrategies<PaymentData, PaymentResult>()
-        .cast<PaymentStrategy>();
-    
+    final strategies =
+        StrategyFactory.getStrategies<PaymentData, PaymentResult>()
+            .cast<PaymentStrategy>();
+
     return PaymentContext(
       defaultStrategy: strategies.firstWhere(
         (s) => s.identifier == 'credit_card',
@@ -183,13 +191,15 @@ class StrategyFactory {
 
   /// Create validation context
   static ValidationContext createValidationContext() {
-    final strategies = StrategyFactory.getStrategies<dynamic, ValidationResult>()
-        .cast<Strategy<dynamic, ValidationResult>>();
-    
+    final strategies =
+        StrategyFactory.getStrategies<dynamic, ValidationResult>()
+            .cast<Strategy<dynamic, ValidationResult>>();
+
     return ValidationContext(
       defaultStrategy: strategies.firstWhere(
         (s) => s.identifier == 'email',
-        orElse: () => AsyncValidationStrategy<String>(EmailValidationStrategy()),
+        orElse: () =>
+            AsyncValidationStrategy<String>(EmailValidationStrategy()),
       ),
       strategies: strategies,
     );
@@ -197,9 +207,10 @@ class StrategyFactory {
 
   /// Create cache context
   static CacheContext<String> createCacheContext() {
-    final strategies = StrategyFactory.getStrategies<String, CacheResult<String>>()
-        .cast<CachingStrategy<String>>();
-    
+    final strategies =
+        StrategyFactory.getStrategies<String, CacheResult<String>>()
+            .cast<CachingStrategy<String>>();
+
     return CacheContext<String>(
       defaultStrategy: strategies.firstWhere(
         (s) => s.identifier == 'hybrid',
@@ -211,9 +222,10 @@ class StrategyFactory {
 
   /// Create UI context
   static UIContext createUIContext() {
-    final strategies = StrategyFactory.getStrategies<UIThemeData, UIRenderingResult>()
-        .cast<UIStrategy>();
-    
+    final strategies =
+        StrategyFactory.getStrategies<UIThemeData, UIRenderingResult>()
+            .cast<UIStrategy>();
+
     return UIContext(
       defaultStrategy: strategies.firstWhere(
         (s) => s.identifier == 'material',
@@ -225,9 +237,10 @@ class StrategyFactory {
 
   /// Create error handling context
   static ErrorHandlingContext createErrorHandlingContext() {
-    final strategies = StrategyFactory.getStrategies<Exception, ErrorHandlingResult>()
-        .cast<ErrorHandlingStrategy>();
-    
+    final strategies =
+        StrategyFactory.getStrategies<Exception, ErrorHandlingResult>()
+            .cast<ErrorHandlingStrategy>();
+
     return ErrorHandlingContext(
       defaultStrategy: strategies.firstWhere(
         (s) => s.identifier == 'default',
@@ -238,7 +251,9 @@ class StrategyFactory {
   }
 
   /// Create recommendation context
-  static RecommendationContext createRecommendationContext(GetRecommendedProductsUseCase useCase) {
+  static RecommendationContext createRecommendationContext(
+    GetRecommendedProductsUseCase useCase,
+  ) {
     final popularityStrategy = PopularityRecommendationStrategy(useCase);
     final categoryStrategy = CategoryRecommendationStrategy(useCase);
     final mixedStrategy = MixedRecommendationStrategy(
@@ -254,9 +269,13 @@ class StrategyFactory {
 
   /// Create currency display context
   static CurrencyDisplayContext createCurrencyDisplayContext() {
-    final strategies = StrategyFactory.getStrategies<CurrencyDisplayRequest, CurrencyDisplayResult>()
-        .cast<CurrencyDisplayStrategy>();
-    
+    final strategies =
+        StrategyFactory.getStrategies<
+              CurrencyDisplayRequest,
+              CurrencyDisplayResult
+            >()
+            .cast<CurrencyDisplayStrategy>();
+
     return CurrencyDisplayContext(
       defaultStrategy: strategies.firstWhere(
         (s) => s.identifier == 'international_focus',

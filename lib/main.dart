@@ -12,6 +12,10 @@ import 'di/injector.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Tune in-memory image cache (acts like NSCache for images)
+  PaintingBinding.instance.imageCache.maximumSize = 300; // number of images
+  PaintingBinding.instance.imageCache.maximumSizeBytes =
+      150 * 1024 * 1024; // ~150MB
   await setupDependencies();
   runApp(const MyApp());
 }
