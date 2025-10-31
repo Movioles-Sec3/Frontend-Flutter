@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:collection';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'strategy.dart';
 
 /// Cache data model
@@ -79,6 +81,119 @@ abstract class CachingStrategy<T> extends Strategy<String, CacheResult<T>> {
 
   /// Check if key exists in cache
   Future<CacheResult<bool>> exists(String key);
+}
+
+/// LRU in-memory caching strategy
+class LruMemoryCachingStrategy<T> extends CachingStrategy<T> {
+  LruMemoryCachingStrategy({this.maxEntries = 128, this.keyPrefixes = const <String>[]});
+
+  @override
+  String get identifier => 'lru_memory';
+
+  /// Maximum number of entries to keep in cache
+  final int maxEntries;
+
+  /// If provided, this strategy will only handle keys that start with one of these prefixes
+  final List<String> keyPrefixes;
+
+  // LinkedHashMap preserves insertion order; we will simulate access-order by
+  // removing and reinserting keys on access to move them to the end (MRU tail).
+  final LinkedHashMap<String, CacheData<T>> _lruMap = LinkedHashMap<String, CacheData<T>>();
+
+  @override
+  bool canHandle(String key) {
+    if (keyPrefixes.isEmpty) return true;
+    for (final String p in keyPrefixes) {
+      if (key.startsWith(p)) return true;
+    }
+    return false;
+  }
+
+  @override
+  Future<CacheResult<T>> execute(String key) async {
+    return retrieve(key);
+  }
+
+  @override
+  Future<CacheResult<bool>> store(String key, T data, {Duration? expiration}) async {
+    try {
+      final DateTime? expTime = expiration == null ? null : DateTime.now().add(expiration);
+      final CacheData<T> payload = CacheData<T>(
+        key: key,
+        data: data,
+        timestamp: DateTime.now(),
+        expirationTime: expTime,
+      );
+
+      // If key exists, delete first to reinsert (becomes MRU)
+      _lruMap.remove(key);
+      _lruMap[key] = payload;
+
+      // Evict LRU if over capacity
+      while (_lruMap.length > maxEntries) {
+        final String lruKey = _lruMap.keys.first;
+        _lruMap.remove(lruKey);
+      }
+
+      return CacheResult.success(true);
+    } catch (e) {
+      return CacheResult.failure('Failed to store in LRU memory cache: $e');
+    }
+  }
+
+  @override
+  Future<CacheResult<T>> retrieve(String key) async {
+    try {
+      final CacheData<T>? found = _lruMap.remove(key);
+      if (found == null) return CacheResult.failure('Key not found in LRU memory cache');
+
+      // If expired, do not reinsert
+      if (found.isExpired) {
+        return CacheResult.failure('Cache entry expired');
+      }
+
+      // Reinsert to mark as MRU
+      _lruMap[key] = found;
+      return CacheResult.success(found.data);
+    } catch (e) {
+      return CacheResult.failure('Failed to retrieve from LRU memory cache: $e');
+    }
+  }
+
+  @override
+  Future<CacheResult<bool>> remove(String key) async {
+    try {
+      final bool removed = _lruMap.remove(key) != null;
+      return CacheResult.success(removed);
+    } catch (e) {
+      return CacheResult.failure('Failed to remove from LRU memory cache: $e');
+    }
+  }
+
+  @override
+  Future<CacheResult<bool>> clear() async {
+    try {
+      _lruMap.clear();
+      return CacheResult.success(true);
+    } catch (e) {
+      return CacheResult.failure('Failed to clear LRU memory cache: $e');
+    }
+  }
+
+  @override
+  Future<CacheResult<bool>> exists(String key) async {
+    try {
+      final CacheData<T>? found = _lruMap[key];
+      if (found == null) return CacheResult.success(false);
+      if (found.isExpired) {
+        _lruMap.remove(key);
+        return CacheResult.success(false);
+      }
+      return CacheResult.success(true);
+    } catch (e) {
+      return CacheResult.failure('Failed to check existence in LRU memory cache: $e');
+    }
+  }
 }
 
 /// In-memory caching strategy
@@ -389,6 +504,99 @@ class HybridCachingStrategy<T> extends CachingStrategy<T> {
       return await fileStrategy.exists(key);
     } catch (e) {
       return CacheResult.failure('Failed to check existence in hybrid cache: $e');
+    }
+  }
+}
+
+/// Preferences (SharedPreferences) caching strategy for simple key/value data
+class PreferencesCachingStrategy extends CachingStrategy<String> {
+  PreferencesCachingStrategy();
+
+  @override
+  String get identifier => 'preferences';
+
+  Future<SharedPreferences> _prefs() => SharedPreferences.getInstance();
+
+  @override
+  Future<CacheResult<String>> execute(String key) async {
+    return await retrieve(key);
+  }
+
+  @override
+  Future<CacheResult<bool>> store(String key, String data, {Duration? expiration}) async {
+    try {
+      final prefs = await _prefs();
+      // We store the payload and an optional expiration timestamp
+      final bool ok = await prefs.setString(key, data);
+      if (expiration != null) {
+        final int ts = DateTime.now().add(expiration).millisecondsSinceEpoch;
+        await prefs.setInt('${key}__exp', ts);
+      } else {
+        await prefs.remove('${key}__exp');
+      }
+      return CacheResult.success(ok);
+    } catch (e) {
+      return CacheResult.failure('Failed to store in preferences: $e');
+    }
+  }
+
+  @override
+  Future<CacheResult<String>> retrieve(String key) async {
+    try {
+      final prefs = await _prefs();
+      final int? exp = prefs.getInt('${key}__exp');
+      if (exp != null && DateTime.now().isAfter(DateTime.fromMillisecondsSinceEpoch(exp))) {
+        await prefs.remove(key);
+        await prefs.remove('${key}__exp');
+        return CacheResult.failure('Cache entry expired');
+      }
+      final String? value = prefs.getString(key);
+      if (value == null) return CacheResult.failure('Key not found in preferences');
+      return CacheResult.success(value);
+    } catch (e) {
+      return CacheResult.failure('Failed to retrieve from preferences: $e');
+    }
+  }
+
+  @override
+  Future<CacheResult<bool>> remove(String key) async {
+    try {
+      final prefs = await _prefs();
+      final bool ok = await prefs.remove(key);
+      await prefs.remove('${key}__exp');
+      return CacheResult.success(ok);
+    } catch (e) {
+      return CacheResult.failure('Failed to remove from preferences: $e');
+    }
+  }
+
+  @override
+  Future<CacheResult<bool>> clear() async {
+    try {
+      final prefs = await _prefs();
+      // Not clearing all; this strategy cannot safely clear app-wide prefs selectively
+      // Return failure to avoid unexpected data loss
+      return CacheResult.failure('Clear not supported for preferences strategy');
+    } catch (e) {
+      return CacheResult.failure('Failed to clear preferences: $e');
+    }
+  }
+
+  @override
+  Future<CacheResult<bool>> exists(String key) async {
+    try {
+      final prefs = await _prefs();
+      final bool hasKey = prefs.containsKey(key);
+      if (!hasKey) return CacheResult.success(false);
+      final int? exp = prefs.getInt('${key}__exp');
+      if (exp != null && DateTime.now().isAfter(DateTime.fromMillisecondsSinceEpoch(exp))) {
+        await prefs.remove(key);
+        await prefs.remove('${key}__exp');
+        return CacheResult.success(false);
+      }
+      return CacheResult.success(true);
+    } catch (e) {
+      return CacheResult.failure('Failed to check existence in preferences: $e');
     }
   }
 }

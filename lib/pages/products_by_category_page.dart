@@ -50,8 +50,9 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
       if (!mounted) return;
 
       if (result.isSuccess) {
+        final items = result.data!;
         setState(() {
-          _products = result.data!;
+          _products = items;
           _loading = false;
         });
       } else {
@@ -139,12 +140,19 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
                           color: Colors.grey[300],
                           child: const Icon(Icons.image_outlined),
                         )
-                      : Image.network(
-                          imagenUrl,
-                          width: 110,
-                          height: 90,
-                          fit: BoxFit.cover,
-                        ),
+                      : (imagenUrl.startsWith('http')
+                          ? Image.network(
+                              imagenUrl,
+                              width: 110,
+                              height: 90,
+                              fit: BoxFit.cover,
+                            )
+                          : Image.asset(
+                              imagenUrl,
+                              width: 110,
+                              height: 90,
+                              fit: BoxFit.cover,
+                            )),
                 ),
                 const SizedBox(width: 12),
                 Expanded(

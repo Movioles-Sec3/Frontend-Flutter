@@ -39,6 +39,9 @@ dependencies:
   get_it: ^7.7.0
   image_picker: ^1.1.2
   path_provider: ^2.1.4
+  sqflite: ^2.3.3+1
+  path: ^1.9.0
+  connectivity_plus: ^6.0.5
   hive: ^2.2.3
   hive_flutter: ^1.1.0
 
