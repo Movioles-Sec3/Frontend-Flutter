@@ -80,6 +80,13 @@ class StrategyFactory {
     final cachePath = '${cacheDir.path}/app_cache';
 
     // Register caching strategies
+    // LRU for order-related keys comes first so it handles those keys specifically
+    StrategyFactory.register<String, CacheResult<String>>(
+      LruMemoryCachingStrategy<String>(
+        maxEntries: 256,
+        keyPrefixes: const <String>['orders:', 'order:'],
+      ),
+    );
     StrategyFactory.register<String, CacheResult<String>>(
       MemoryCachingStrategy<String>(maxSize: 100),
     );
@@ -89,6 +96,10 @@ class StrategyFactory {
         serializer: (data) => data,
         deserializer: (data) => data,
       ),
+    );
+    // Preferences key/value storage (SharedPreferences)
+    StrategyFactory.register<String, CacheResult<String>>(
+      PreferencesCachingStrategy(),
     );
     StrategyFactory.register<String, CacheResult<String>>(
       HybridCachingStrategy<String>(
