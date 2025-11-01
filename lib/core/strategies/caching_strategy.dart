@@ -1,4 +1,3 @@
-import 'dart:collection';
 import 'dart:convert';
 import 'dart:collection';
 import 'dart:io';
@@ -32,12 +31,15 @@ class CacheData<T> {
     'expirationTime': expirationTime?.millisecondsSinceEpoch,
   };
 
-  factory CacheData.fromJson(Map<String, dynamic> json, T Function(dynamic) fromJsonT) {
+  factory CacheData.fromJson(
+    Map<String, dynamic> json,
+    T Function(dynamic) fromJsonT,
+  ) {
     return CacheData<T>(
       key: json['key'] as String,
       data: fromJsonT(json['data']),
       timestamp: DateTime.fromMillisecondsSinceEpoch(json['timestamp'] as int),
-      expirationTime: json['expirationTime'] != null 
+      expirationTime: json['expirationTime'] != null
           ? DateTime.fromMillisecondsSinceEpoch(json['expirationTime'] as int)
           : null,
     );
@@ -46,18 +48,15 @@ class CacheData<T> {
 
 /// Cache result model
 class CacheResult<T> {
-  CacheResult({
-    required this.success,
-    this.data,
-    this.error,
-  });
+  CacheResult({required this.success, this.data, this.error});
 
   final bool success;
   final T? data;
   final String? error;
 
   factory CacheResult.success(T data) => CacheResult(success: true, data: data);
-  factory CacheResult.failure(String error) => CacheResult(success: false, error: error);
+  factory CacheResult.failure(String error) =>
+      CacheResult(success: false, error: error);
 }
 
 /// Base caching strategy interface
@@ -86,7 +85,10 @@ abstract class CachingStrategy<T> extends Strategy<String, CacheResult<T>> {
 
 /// LRU in-memory caching strategy
 class LruMemoryCachingStrategy<T> extends CachingStrategy<T> {
-  LruMemoryCachingStrategy({this.maxEntries = 128, this.keyPrefixes = const <String>[]});
+  LruMemoryCachingStrategy({
+    this.maxEntries = 128,
+    this.keyPrefixes = const <String>[],
+  });
 
   @override
   String get identifier => 'lru_memory';
@@ -99,7 +101,8 @@ class LruMemoryCachingStrategy<T> extends CachingStrategy<T> {
 
   // LinkedHashMap preserves insertion order; we will simulate access-order by
   // removing and reinserting keys on access to move them to the end (MRU tail).
-  final LinkedHashMap<String, CacheData<T>> _lruMap = LinkedHashMap<String, CacheData<T>>();
+  final LinkedHashMap<String, CacheData<T>> _lruMap =
+      LinkedHashMap<String, CacheData<T>>();
 
   @override
   bool canHandle(String key) {
@@ -116,9 +119,15 @@ class LruMemoryCachingStrategy<T> extends CachingStrategy<T> {
   }
 
   @override
-  Future<CacheResult<bool>> store(String key, T data, {Duration? expiration}) async {
+  Future<CacheResult<bool>> store(
+    String key,
+    T data, {
+    Duration? expiration,
+  }) async {
     try {
-      final DateTime? expTime = expiration == null ? null : DateTime.now().add(expiration);
+      final DateTime? expTime = expiration == null
+          ? null
+          : DateTime.now().add(expiration);
       final CacheData<T> payload = CacheData<T>(
         key: key,
         data: data,
@@ -146,7 +155,8 @@ class LruMemoryCachingStrategy<T> extends CachingStrategy<T> {
   Future<CacheResult<T>> retrieve(String key) async {
     try {
       final CacheData<T>? found = _lruMap.remove(key);
-      if (found == null) return CacheResult.failure('Key not found in LRU memory cache');
+      if (found == null)
+        return CacheResult.failure('Key not found in LRU memory cache');
 
       // If expired, do not reinsert
       if (found.isExpired) {
@@ -157,7 +167,9 @@ class LruMemoryCachingStrategy<T> extends CachingStrategy<T> {
       _lruMap[key] = found;
       return CacheResult.success(found.data);
     } catch (e) {
-      return CacheResult.failure('Failed to retrieve from LRU memory cache: $e');
+      return CacheResult.failure(
+        'Failed to retrieve from LRU memory cache: $e',
+      );
     }
   }
 
@@ -192,7 +204,9 @@ class LruMemoryCachingStrategy<T> extends CachingStrategy<T> {
       }
       return CacheResult.success(true);
     } catch (e) {
-      return CacheResult.failure('Failed to check existence in LRU memory cache: $e');
+      return CacheResult.failure(
+        'Failed to check existence in LRU memory cache: $e',
+      );
     }
   }
 }
@@ -205,7 +219,7 @@ class MemoryCachingStrategy<T> extends CachingStrategy<T> {
   String get identifier => 'memory';
 
   final int maxSize;
-  final LinkedHashMap<String, CacheData<T>> _cache = LinkedHashMap();
+  final Map<String, CacheData<T>> _cache = {};
 
   @override
   Future<CacheResult<T>> execute(String key) async {
@@ -213,18 +227,19 @@ class MemoryCachingStrategy<T> extends CachingStrategy<T> {
   }
 
   @override
-  Future<CacheResult<bool>> store(String key, T data, {Duration? expiration}) async {
+  Future<CacheResult<bool>> store(
+    String key,
+    T data, {
+    Duration? expiration,
+  }) async {
     try {
-      // Remove existing entry to refresh its position (LRU behavior)
-      _cache.remove(key);
-
-      // Remove least recently used entry if cache is full
+      // Remove oldest entries if cache is full
       if (_cache.length >= maxSize) {
         final oldestKey = _cache.keys.first;
         _cache.remove(oldestKey);
       }
 
-      final expirationTime = expiration != null 
+      final expirationTime = expiration != null
           ? DateTime.now().add(expiration)
           : null;
 
@@ -244,7 +259,7 @@ class MemoryCachingStrategy<T> extends CachingStrategy<T> {
   @override
   Future<CacheResult<T>> retrieve(String key) async {
     try {
-      final cacheData = _cache.remove(key);
+      final cacheData = _cache[key];
       if (cacheData == null) {
         return CacheResult.failure('Key not found in memory cache');
       }
@@ -253,9 +268,6 @@ class MemoryCachingStrategy<T> extends CachingStrategy<T> {
         _cache.remove(key);
         return CacheResult.failure('Cache entry expired');
       }
-
-      // Re-insert to mark as most recently used
-      _cache[key] = cacheData;
 
       return CacheResult.success(cacheData.data);
     } catch (e) {
@@ -286,23 +298,12 @@ class MemoryCachingStrategy<T> extends CachingStrategy<T> {
   @override
   Future<CacheResult<bool>> exists(String key) async {
     try {
-      final cacheData = _cache[key];
-      if (cacheData == null) {
-        return CacheResult.success(false);
-      }
-
-      if (cacheData.isExpired) {
-        _cache.remove(key);
-        return CacheResult.success(false);
-      }
-
-      // Touch to keep entry fresh in LRU ordering
-      _cache.remove(key);
-      _cache[key] = cacheData;
-
-      return CacheResult.success(true);
+      final exists = _cache.containsKey(key) && !_cache[key]!.isExpired;
+      return CacheResult.success(exists);
     } catch (e) {
-      return CacheResult.failure('Failed to check existence in memory cache: $e');
+      return CacheResult.failure(
+        'Failed to check existence in memory cache: $e',
+      );
     }
   }
 }
@@ -336,10 +337,14 @@ class FileCachingStrategy<T> extends CachingStrategy<T> {
   }
 
   @override
-  Future<CacheResult<bool>> store(String key, T data, {Duration? expiration}) async {
+  Future<CacheResult<bool>> store(
+    String key,
+    T data, {
+    Duration? expiration,
+  }) async {
     try {
       final file = await _getCacheFile(key);
-      final expirationTime = expiration != null 
+      final expirationTime = expiration != null
           ? DateTime.now().add(expiration)
           : null;
 
@@ -367,7 +372,10 @@ class FileCachingStrategy<T> extends CachingStrategy<T> {
 
       final content = await file.readAsString();
       final json = jsonDecode(content) as Map<String, dynamic>;
-      final cacheData = CacheData.fromJson(json, (data) => deserializer(data as String));
+      final cacheData = CacheData.fromJson(
+        json,
+        (data) => deserializer(data as String),
+      );
 
       if (cacheData.isExpired) {
         await file.delete();
@@ -417,7 +425,10 @@ class FileCachingStrategy<T> extends CachingStrategy<T> {
 
       final content = await file.readAsString();
       final json = jsonDecode(content) as Map<String, dynamic>;
-      final cacheData = CacheData.fromJson(json, (data) => deserializer(data as String));
+      final cacheData = CacheData.fromJson(
+        json,
+        (data) => deserializer(data as String),
+      );
 
       if (cacheData.isExpired) {
         await file.delete();
@@ -450,12 +461,24 @@ class HybridCachingStrategy<T> extends CachingStrategy<T> {
   }
 
   @override
-  Future<CacheResult<bool>> store(String key, T data, {Duration? expiration}) async {
+  Future<CacheResult<bool>> store(
+    String key,
+    T data, {
+    Duration? expiration,
+  }) async {
     try {
       // Store in both memory and file
-      final memoryResult = await memoryStrategy.store(key, data, expiration: expiration);
-      final fileResult = await fileStrategy.store(key, data, expiration: expiration);
-      
+      final memoryResult = await memoryStrategy.store(
+        key,
+        data,
+        expiration: expiration,
+      );
+      final fileResult = await fileStrategy.store(
+        key,
+        data,
+        expiration: expiration,
+      );
+
       if (memoryResult.success && fileResult.success) {
         return CacheResult.success(true);
       } else {
@@ -479,10 +502,7 @@ class HybridCachingStrategy<T> extends CachingStrategy<T> {
       final fileResult = await fileStrategy.retrieve(key);
       if (fileResult.success) {
         // Store in memory for future access
-        final T? data = fileResult.data;
-        if (data != null) {
-          await memoryStrategy.store(key, data);
-        }
+        await memoryStrategy.store(key, fileResult.data!);
         return fileResult;
       }
 
@@ -497,7 +517,7 @@ class HybridCachingStrategy<T> extends CachingStrategy<T> {
     try {
       final memoryResult = await memoryStrategy.remove(key);
       final fileResult = await fileStrategy.remove(key);
-      
+
       return CacheResult.success(memoryResult.success || fileResult.success);
     } catch (e) {
       return CacheResult.failure('Failed to remove from hybrid cache: $e');
@@ -509,7 +529,7 @@ class HybridCachingStrategy<T> extends CachingStrategy<T> {
     try {
       final memoryResult = await memoryStrategy.clear();
       final fileResult = await fileStrategy.clear();
-      
+
       return CacheResult.success(memoryResult.success && fileResult.success);
     } catch (e) {
       return CacheResult.failure('Failed to clear hybrid cache: $e');
@@ -526,7 +546,9 @@ class HybridCachingStrategy<T> extends CachingStrategy<T> {
 
       return await fileStrategy.exists(key);
     } catch (e) {
-      return CacheResult.failure('Failed to check existence in hybrid cache: $e');
+      return CacheResult.failure(
+        'Failed to check existence in hybrid cache: $e',
+      );
     }
   }
 }
@@ -546,7 +568,11 @@ class PreferencesCachingStrategy extends CachingStrategy<String> {
   }
 
   @override
-  Future<CacheResult<bool>> store(String key, String data, {Duration? expiration}) async {
+  Future<CacheResult<bool>> store(
+    String key,
+    String data, {
+    Duration? expiration,
+  }) async {
     try {
       final prefs = await _prefs();
       // We store the payload and an optional expiration timestamp
@@ -568,13 +594,15 @@ class PreferencesCachingStrategy extends CachingStrategy<String> {
     try {
       final prefs = await _prefs();
       final int? exp = prefs.getInt('${key}__exp');
-      if (exp != null && DateTime.now().isAfter(DateTime.fromMillisecondsSinceEpoch(exp))) {
+      if (exp != null &&
+          DateTime.now().isAfter(DateTime.fromMillisecondsSinceEpoch(exp))) {
         await prefs.remove(key);
         await prefs.remove('${key}__exp');
         return CacheResult.failure('Cache entry expired');
       }
       final String? value = prefs.getString(key);
-      if (value == null) return CacheResult.failure('Key not found in preferences');
+      if (value == null)
+        return CacheResult.failure('Key not found in preferences');
       return CacheResult.success(value);
     } catch (e) {
       return CacheResult.failure('Failed to retrieve from preferences: $e');
@@ -599,7 +627,9 @@ class PreferencesCachingStrategy extends CachingStrategy<String> {
       final prefs = await _prefs();
       // Not clearing all; this strategy cannot safely clear app-wide prefs selectively
       // Return failure to avoid unexpected data loss
-      return CacheResult.failure('Clear not supported for preferences strategy');
+      return CacheResult.failure(
+        'Clear not supported for preferences strategy',
+      );
     } catch (e) {
       return CacheResult.failure('Failed to clear preferences: $e');
     }
@@ -612,30 +642,34 @@ class PreferencesCachingStrategy extends CachingStrategy<String> {
       final bool hasKey = prefs.containsKey(key);
       if (!hasKey) return CacheResult.success(false);
       final int? exp = prefs.getInt('${key}__exp');
-      if (exp != null && DateTime.now().isAfter(DateTime.fromMillisecondsSinceEpoch(exp))) {
+      if (exp != null &&
+          DateTime.now().isAfter(DateTime.fromMillisecondsSinceEpoch(exp))) {
         await prefs.remove(key);
         await prefs.remove('${key}__exp');
         return CacheResult.success(false);
       }
       return CacheResult.success(true);
     } catch (e) {
-      return CacheResult.failure('Failed to check existence in preferences: $e');
+      return CacheResult.failure(
+        'Failed to check existence in preferences: $e',
+      );
     }
   }
 }
 
 /// Cache context for managing caching strategies
 class CacheContext<T> {
-  CacheContext({
-    required this.defaultStrategy,
-    this.strategies = const [],
-  });
+  CacheContext({required this.defaultStrategy, this.strategies = const []});
 
   final CachingStrategy<T> defaultStrategy;
   final List<CachingStrategy<T>> strategies;
 
   /// Store data in cache
-  Future<CacheResult<bool>> store(String key, T data, {Duration? expiration}) async {
+  Future<CacheResult<bool>> store(
+    String key,
+    T data, {
+    Duration? expiration,
+  }) async {
     final strategy = _selectStrategy(key);
     return await strategy.store(key, data, expiration: expiration);
   }
