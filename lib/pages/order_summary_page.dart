@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tapandtoast/core/strategies/caching_strategy.dart';
@@ -64,10 +65,12 @@ class OrderSummaryPage extends StatelessWidget {
           builder: (BuildContext context, Widget? _) {
             final List<CartItemData> data = CartService.instance.items;
             final List<Map<String, num>> payload = data
-                .map((CartItemData e) => <String, num>{
-                      'price': e.unitPrice,
-                      'qty': e.quantity,
-                    })
+                .map(
+                  (CartItemData e) => <String, num>{
+                    'price': e.unitPrice,
+                    'qty': e.quantity,
+                  },
+                )
                 .toList(growable: false);
 
             return ListView(
@@ -124,22 +127,29 @@ class OrderSummaryPage extends StatelessWidget {
                     onPressed: () async {
                       final contextToUse = context;
                       final CartItemData reference = data.first;
-                      final double subtotal = data.fold<double>(0, (s, e) => s + e.lineTotal);
+                      final double subtotal = data.fold<double>(
+                        0,
+                        (s, e) => s + e.lineTotal,
+                      );
 
                       showDialog(
                         context: contextToUse,
                         builder: (_) {
-                          final Future<Map<String, double>> future = ExchangeRateService().getRates('COP');
+                          final Future<Map<String, double>> future =
+                              ExchangeRateService().getRates('COP');
 
                           String formatCop(double val) {
-                            final price = val.toStringAsFixed(0).replaceAllMapped(
-                              RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-                              (Match m) => '${m[1]},',
-                            );
+                            final price = val
+                                .toStringAsFixed(0)
+                                .replaceAllMapped(
+                                  RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+                                  (Match m) => '${m[1]},',
+                                );
                             return '\$${price}';
                           }
 
-                          String formatMoney(double val, String symbol) => '$symbol${val.toStringAsFixed(2)}';
+                          String formatMoney(double val, String symbol) =>
+                              '$symbol${val.toStringAsFixed(2)}';
 
                           return AlertDialog(
                             title: const Text('Total in Other Currencies'),
@@ -149,32 +159,46 @@ class OrderSummaryPage extends StatelessWidget {
                                 if (!snapshot.hasData) {
                                   return const SizedBox(
                                     height: 80,
-                                    child: Center(child: CircularProgressIndicator()),
+                                    child: Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
                                   );
                                 }
-                                final Map<String, double> rates = snapshot.data!;
-                                final double subtotalUsd = subtotal * (rates['USD'] ?? 0);
-                                final double subtotalEur = subtotal * (rates['EUR'] ?? 0);
-                                final double subtotalMxn = subtotal * (rates['MXN'] ?? 0);
+                                final Map<String, double> rates =
+                                    snapshot.data!;
+                                final double subtotalUsd =
+                                    subtotal * (rates['USD'] ?? 0);
+                                final double subtotalEur =
+                                    subtotal * (rates['EUR'] ?? 0);
+                                final double subtotalMxn =
+                                    subtotal * (rates['MXN'] ?? 0);
 
                                 return Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     ListTile(
                                       leading: const Text('COP'),
-                                      title: Text('${formatCop(subtotal)} (COP)'),
+                                      title: Text(
+                                        '${formatCop(subtotal)} (COP)',
+                                      ),
                                     ),
                                     ListTile(
                                       leading: const Text('USD'),
-                                      title: Text('${formatMoney(subtotalUsd, '\$')} (USD)'),
+                                      title: Text(
+                                        '${formatMoney(subtotalUsd, '\$')} (USD)',
+                                      ),
                                     ),
                                     ListTile(
                                       leading: const Text('EUR'),
-                                      title: Text('${formatMoney(subtotalEur, '€')} (EUR)'),
+                                      title: Text(
+                                        '${formatMoney(subtotalEur, '€')} (EUR)',
+                                      ),
                                     ),
                                     ListTile(
                                       leading: const Text('MXN'),
-                                      title: Text('${formatMoney(subtotalMxn, '\$')} (MXN)'),
+                                      title: Text(
+                                        '${formatMoney(subtotalMxn, '\$')} (MXN)',
+                                      ),
                                     ),
                                   ],
                                 );
@@ -182,7 +206,8 @@ class OrderSummaryPage extends StatelessWidget {
                             ),
                             actions: [
                               TextButton(
-                                onPressed: () => Navigator.of(contextToUse).pop(),
+                                onPressed: () =>
+                                    Navigator.of(contextToUse).pop(),
                                 child: const Text('Close'),
                               ),
                             ],
@@ -199,8 +224,12 @@ class OrderSummaryPage extends StatelessWidget {
                       : () async {
                           final CreateOrderUseCase useCase = GetIt.I
                               .get<CreateOrderUseCase>();
-                          final List<Map<String, int>> payload = CartService.instance.toOrderProductosPayload();
-                          final Result<OrderEntity> result = await useCase(payload);
+                          final List<Map<String, int>> payload = CartService
+                              .instance
+                              .toOrderProductosPayload();
+                          final Result<OrderEntity> result = await useCase(
+                            payload,
+                          );
 
                           if (!context.mounted) return;
 
@@ -208,37 +237,50 @@ class OrderSummaryPage extends StatelessWidget {
                             CartService.instance.clear();
                             final OrderEntity order = result.data!;
                             // persist last order and update cached list
-                            final Map<String, dynamic> raw = order.raw ?? <String, dynamic>{
-                              'id': order.id,
-                              'total': order.total,
-                              'estado': order.status,
-                              'fecha_hora': order.placedAt,
-                              'fecha_listo': order.readyAt ?? '',
-                              'fecha_entregado': order.deliveredAt ?? '',
-                              if (order.qr != null) 'qr': order.qr,
-                            };
-                            unawaited(LocalOrdersStorage.instance.saveLastOrder(raw));
-                            LocalOrdersStorage.instance.readOrders().then((list) {
-                              final List<Map<String, dynamic>> updated = <Map<String, dynamic>>[raw, ...list];
+                            final Map<String, dynamic> raw =
+                                order.raw ??
+                                <String, dynamic>{
+                                  'id': order.id,
+                                  'total': order.total,
+                                  'estado': order.status,
+                                  'fecha_hora': order.placedAt,
+                                  'fecha_listo': order.readyAt ?? '',
+                                  'fecha_entregado': order.deliveredAt ?? '',
+                                  if (order.qr != null) 'qr': order.qr,
+                                };
+                            unawaited(
+                              LocalOrdersStorage.instance.saveLastOrder(raw),
+                            );
+                            LocalOrdersStorage.instance.readOrders().then((
+                              list,
+                            ) {
+                              final List<Map<String, dynamic>> updated =
+                                  <Map<String, dynamic>>[raw, ...list];
                               LocalOrdersStorage.instance.saveOrders(updated);
                             });
                             // Save order and items to relational DB
-                            final items = data.map((e) => <String, dynamic>{
-                              'productId': e.productId,
-                              'name': e.name,
-                              'quantity': e.quantity,
-                              'unitPrice': e.unitPrice,
-                            }).toList(growable: false);
-                            unawaited(OrdersDb.instance.upsertOrder(
-                              id: order.id,
-                              orderNumber: order.id.toString(),
-                              total: order.total,
-                              status: order.status,
-                              placedAt: order.placedAt,
-                              readyAt: order.readyAt,
-                              deliveredAt: order.deliveredAt,
-                              items: items,
-                            ));
+                            final items = data
+                                .map(
+                                  (e) => <String, dynamic>{
+                                    'productId': e.productId,
+                                    'name': e.name,
+                                    'quantity': e.quantity,
+                                    'unitPrice': e.unitPrice,
+                                  },
+                                )
+                                .toList(growable: false);
+                            unawaited(
+                              OrdersDb.instance.upsertOrder(
+                                id: order.id,
+                                orderNumber: order.id.toString(),
+                                total: order.total,
+                                status: order.status,
+                                placedAt: order.placedAt,
+                                readyAt: order.readyAt,
+                                deliveredAt: order.deliveredAt,
+                                items: items,
+                              ),
+                            );
                             Navigator.pushReplacement(
                               context,
                               MaterialPageRoute<OrderPickupPage>(
@@ -261,16 +303,24 @@ class OrderSummaryPage extends StatelessWidget {
                           } else {
                             // Network-aware fallback: enqueue for eventual connectivity
                             final String err = result.error ?? 'Network error';
-                            final bool looksNetwork = err.contains('SocketException') || err.contains('Connection refused') || err.contains('timeout') || err.contains('Network');
+                            final bool looksNetwork =
+                                err.contains('SocketException') ||
+                                err.contains('Connection refused') ||
+                                err.contains('timeout') ||
+                                err.contains('Network');
                             if (looksNetwork) {
                               await OrdersSyncService.instance.enqueue(payload);
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('No internet. Your order will be placed automatically when you are back online.')),
+                                const SnackBar(
+                                  content: Text(
+                                    'No internet. Your order will be placed automatically when you are back online.',
+                                  ),
+                                ),
                               );
                             } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(err)),
-                              );
+                              ScaffoldMessenger.of(
+                                context,
+                              ).showSnackBar(SnackBar(content: Text(err)));
                             }
                           }
                         },
@@ -299,9 +349,9 @@ double _subtotalIsolate(List<Map<String, num>> items) {
 Future<double> _subtotalWithCache(List<Map<String, num>> payload) async {
   try {
     // Create a simple key from productId-qty pairs
-    final String key = 'orders:subtotal:' + payload
-        .map((m) => '${m['price']}:${m['qty']}')
-        .join('|');
+    final String key =
+        'orders:subtotal:' +
+        payload.map((m) => '${m['price']}:${m['qty']}').join('|');
     final CacheContext<String> cache = StrategyFactory.createCacheContext();
     final CacheResult<String> cached = await cache.retrieve(key);
     if (cached.success && cached.data != null) {
@@ -317,10 +367,7 @@ Future<double> _subtotalWithCache(List<Map<String, num>> payload) async {
     cache.store(key, value.toString(), expiration: const Duration(minutes: 5));
     return value;
   } catch (_) {
-    return compute<List<Map<String, num>>, double>(
-      _subtotalIsolate,
-      payload,
-    );
+    return compute<List<Map<String, num>>, double>(_subtotalIsolate, payload);
   }
 }
 
@@ -331,21 +378,7 @@ class _EditableProductTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Widget image = item.imageUrl.startsWith('http')
-        ? CachedNetworkImage(
-            imageUrl: item.imageUrl,
-            fit: BoxFit.cover,
-            placeholder: (BuildContext context, String _) => Container(
-              color: Colors.black12,
-              child: const Center(
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-            errorWidget: (BuildContext context, String _, dynamic __) =>
-                Container(
-              color: Colors.black12,
-              child: const Icon(Icons.image_not_supported),
-            ),
-          )
+        ? Image.network(item.imageUrl, fit: BoxFit.cover)
         : Image.asset(item.imageUrl, fit: BoxFit.cover);
 
     return Container(

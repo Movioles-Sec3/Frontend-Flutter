@@ -40,7 +40,7 @@ class _ProfilePageState extends State<ProfilePage> {
   late final ProfileLocalStorage _profileLocalStorage;
   Uint8List? _profilePhotoBytes;
   bool _isOffline = false;
-  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
   void initState() {
@@ -51,12 +51,12 @@ class _ProfilePageState extends State<ProfilePage> {
     _photoService.addListener(_handlePhotoChange);
     _connectivitySubscription = Connectivity()
         .onConnectivityChanged
-        .listen((ConnectivityResult result) {
-      _handleConnectivityChange(result);
+        .listen((List<ConnectivityResult> results) {
+      _handleConnectivityChange(results);
     });
-    Connectivity().checkConnectivity().then((ConnectivityResult result) {
+    Connectivity().checkConnectivity().then((List<ConnectivityResult> results) {
       if (!mounted) return;
-      _handleConnectivityChange(result, showFeedback: false);
+      _handleConnectivityChange(results, showFeedback: false);
     });
     _load();
   }
@@ -90,10 +90,10 @@ class _ProfilePageState extends State<ProfilePage> {
         _error = null;
       });
     } else {
-      final ConnectivityResult connectivityResult =
+      final List<ConnectivityResult> connectivityResults =
           await Connectivity().checkConnectivity();
-      _handleConnectivityChange(connectivityResult, showFeedback: false);
-      final bool offline = connectivityResult == ConnectivityResult.none;
+      _handleConnectivityChange(connectivityResults, showFeedback: false);
+      final bool offline = _isOfflineFromResults(connectivityResults);
       final UserEntity? cached = await _profileLocalStorage.getUser();
       if (!mounted) return;
       if (cached != null) {
@@ -180,10 +180,10 @@ class _ProfilePageState extends State<ProfilePage> {
     return Isolate.run(() => File(path).readAsBytesSync());
   }
 
-  void _handleConnectivityChange(ConnectivityResult result,
+  void _handleConnectivityChange(List<ConnectivityResult> results,
       {bool showFeedback = true}) {
     if (!mounted) return;
-    final bool offline = result == ConnectivityResult.none;
+    final bool offline = _isOfflineFromResults(results);
     if (offline != _isOffline) {
       setState(() {
         _isOffline = offline;
@@ -212,6 +212,11 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       );
     }
+  }
+
+  bool _isOfflineFromResults(List<ConnectivityResult> results) {
+    if (results.isEmpty) return true;
+    return results.every((ConnectivityResult result) => result == ConnectivityResult.none);
   }
 
   @override
