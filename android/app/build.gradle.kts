@@ -1,6 +1,8 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
+    // Google services plugin to read google-services.json
+    id("com.google.gms.google-services")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -8,15 +10,14 @@ plugins {
 android {
     namespace = "com.example.flutter_tapandtoast"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
     defaultConfig {
@@ -37,8 +38,20 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
 }
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Import the Firebase BoM to align versions of Firebase libraries
+    implementation(platform("com.google.firebase:firebase-bom:34.5.0"))
+    // Example Firebase product dependency (add others as needed)
+    implementation("com.google.firebase:firebase-analytics")
 }

@@ -120,6 +120,27 @@ class _MyAppState extends State<MyApp> {
         onSurface: Color(0xFF1A1A1A),
       ),
       textTheme: lightTextTheme,
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFFF0F2F5),
+        hintStyle: TextStyle(color: const Color(0xFF1A1A1A).withOpacity(0.6)),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: primary, width: 1.2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+      ),
       appBarTheme: const AppBarTheme(
         centerTitle: true,
         elevation: 0,
@@ -149,6 +170,27 @@ class _MyAppState extends State<MyApp> {
         onSurface: Colors.white,
       ),
       textTheme: darkTextTheme,
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFF2B2B2B),
+        hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.white70, width: 1.2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+      ),
       appBarTheme: const AppBarTheme(
         centerTitle: true,
         elevation: 0,

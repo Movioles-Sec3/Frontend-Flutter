@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "713153654067",
+    "project_id": "tapandtoast-e5e3e",
+    "storage_bucket": "tapandtoast-e5e3e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:713153654067:android:03e10747a85747a5bf6246",
+        "android_client_info": {
+          "package_name": "com.example.flutter_tapandtoast"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAs_LBJ4to-LCpAJXZxjxxmA5W7kakc2vM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

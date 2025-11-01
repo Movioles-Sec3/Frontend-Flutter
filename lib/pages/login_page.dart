@@ -37,8 +37,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _restoreCachedDraft() async {
-    final Map<String, String>? draft =
-        await _formCacheService.getLoginDraft();
+    final Map<String, String>? draft = await _formCacheService.getLoginDraft();
     if (!mounted || draft == null) return;
 
     if (draft['email'] != null && draft['email']!.isNotEmpty) {
@@ -62,7 +61,9 @@ class _LoginPageState extends State<LoginPage> {
     if (_hasDisallowedCharacters(email) || _hasDisallowedCharacters(password)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Remove emojis or invalid characters from email and password.'),
+          content: Text(
+            'Remove emojis or invalid characters from email and password.',
+          ),
         ),
       );
       return;
@@ -147,29 +148,13 @@ class _LoginPageState extends State<LoginPage> {
                   children: [
                     TextField(
                       controller: _emailController,
-                      decoration: InputDecoration(
-                        hintText: "Email",
-                        filled: true,
-                        fillColor: Colors.grey.shade200,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
+                      decoration: const InputDecoration(hintText: "Email"),
                     ),
                     const SizedBox(height: 16),
                     TextField(
                       controller: _passwordController,
                       obscureText: true,
-                      decoration: InputDecoration(
-                        hintText: "Password",
-                        filled: true,
-                        fillColor: Colors.grey.shade200,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
+                      decoration: const InputDecoration(hintText: "Password"),
                     ),
                     const SizedBox(height: 20),
 
@@ -259,18 +244,24 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _socialButton(String text) {
+    final ThemeData theme = Theme.of(context);
+    final bool isDark = theme.brightness == Brightness.dark;
+    final Color bg = isDark ? Colors.grey.shade800 : Colors.grey.shade200;
+    final Color fg = isDark ? Colors.white : Colors.black;
+    final Color border = isDark ? Colors.grey.shade700 : Colors.grey.shade300;
     return SizedBox(
       width: double.infinity,
       height: 50,
       child: OutlinedButton(
         style: OutlinedButton.styleFrom(
-          backgroundColor: Colors.grey.shade200,
+          backgroundColor: bg,
+          side: BorderSide(color: border),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
         ),
         onPressed: () {},
-        child: Text(text, style: const TextStyle(color: Colors.black)),
+        child: Text(text, style: TextStyle(color: fg)),
       ),
     );
   }
