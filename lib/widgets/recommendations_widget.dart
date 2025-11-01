@@ -1,6 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../core/strategies/recommendation_strategy.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../services/image_cache_manager.dart';
+import '../services/local_catalog_storage.dart';
 import '../core/strategies/error_handling_strategy.dart';
 import '../domain/entities/product_recommendation.dart';
 import '../di/injector.dart';
@@ -48,6 +51,48 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
       _error = null;
     });
 
+    // Fast path: try cached recommendations first
+    try {
+      final List<Map<String, dynamic>> cached = widget.categoryId == null
+          ? await LocalCatalogStorage.instance.readHomeRecommended()
+          : await LocalCatalogStorage.instance.readCategoryRecommended(
+              categoryId: widget.categoryId!,
+            );
+      if (cached.isNotEmpty && mounted) {
+        final list = cached
+            .map((m) {
+              final ProductType pt = ProductType.fromJson(
+                (m['productType'] as Map<String, dynamic>?) ??
+                    <String, dynamic>{
+                      'id': (m['productTypeId'] ?? m['id_tipo'] ?? 0),
+                      'nombre': (m['productTypeName'] ?? ''),
+                    },
+              );
+              return ProductRecommendation(
+                id: (m['id'] as num?)?.toInt() ?? 0,
+                name: (m['name'] ?? m['nombre'] ?? '').toString(),
+                description: (m['description'] ?? m['descripcion'] ?? '')
+                    .toString(),
+                imageUrl:
+                    (m['imageUrl'] ?? m['imagen_url'] ?? m['imagen'] ?? '')
+                        .toString(),
+                price: ((m['price'] ?? m['precio'] ?? 0) as num).toDouble(),
+                available: (m['available'] ?? m['disponible'] ?? true) as bool,
+                typeId:
+                    (m['productTypeId'] as num?)?.toInt() ??
+                    (m['id_tipo'] as num?)?.toInt() ??
+                    pt.id,
+                productType: pt,
+              );
+            })
+            .toList(growable: false);
+        setState(() {
+          _recommendations = list;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {}
+
     try {
       final request = RecommendationRequest(
         limit: widget.limit,
@@ -61,6 +106,34 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
           _recommendations = result.products!;
           _isLoading = false;
         });
+
+        // Persist recommendations to cache for offline access
+        try {
+          final raw = _recommendations
+              .map(
+                (p) => <String, dynamic>{
+                  'id': p.id,
+                  'name': p.name,
+                  'description': p.description,
+                  'imageUrl': p.imageUrl,
+                  'price': p.price,
+                  'available': p.available,
+                  'productTypeId': p.productType.id,
+                  'productType': p.productType.toJson(),
+                },
+              )
+              .toList(growable: false);
+          if (widget.categoryId == null) {
+            // ignore: discarded_futures
+            LocalCatalogStorage.instance.saveHomeRecommended(raw);
+          } else {
+            // ignore: discarded_futures
+            LocalCatalogStorage.instance.saveCategoryRecommended(
+              categoryId: widget.categoryId!,
+              products: raw,
+            );
+          }
+        } catch (_) {}
       } else {
         final message = result.error;
         String friendly = 'Failed to load recommendations';
@@ -72,10 +145,15 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
             friendly = handled.userMessage;
           } catch (_) {}
         }
-        setState(() {
-          _error = friendly;
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            // Only surface error if we have nothing to show
+            if (_recommendations.isEmpty) {
+              _error = friendly;
+            }
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
       String friendly = 'Error loading recommendations';
@@ -85,10 +163,14 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
         );
         friendly = handled.userMessage;
       } catch (_) {}
-      setState(() {
-        _error = friendly;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          if (_recommendations.isEmpty) {
+            _error = friendly;
+          }
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -236,20 +318,11 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
                 child: product.imageUrl.isNotEmpty
                     ? CachedNetworkImage(
                         imageUrl: product.imageUrl,
+                        cacheKey: 'img:reco:${product.id}:${product.imageUrl}',
+                        cacheManager: AppImageCacheManagers.productImages,
                         fit: BoxFit.cover,
-                        placeholder: (BuildContext context, String _) =>
-                            Container(
-                          color: Colors.black12,
-                          child: const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ),
-                        errorWidget: (
-                          BuildContext context,
-                          String _,
-                          dynamic __,
-                        ) =>
-                            const Icon(
+                        placeholder: (_, __) => const SizedBox.shrink(),
+                        errorWidget: (_, __, ___) => const Icon(
                           Icons.image_not_supported,
                           size: 48,
                           color: Colors.grey,

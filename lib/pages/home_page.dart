@@ -1,6 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'categories_page.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../services/image_cache_manager.dart';
+import '../widgets/offline_notice.dart';
 import 'products_by_category_page.dart';
 import '../widgets/recommendations_widget.dart';
 
@@ -50,6 +53,7 @@ class HomePage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
+            const OfflineNotice(),
             _SearchBar(colors: colors),
             const SizedBox(height: 16),
             _Promotions(promotions: _promotions),
@@ -67,10 +71,7 @@ class HomePage extends StatelessWidget {
             const SizedBox(height: 8),
             _CategoriesList(categories: _categories),
             const SizedBox(height: 16),
-            const RecommendationsWidget(
-              title: 'Recommended for You',
-              limit: 5,
-            ),
+            const RecommendationsWidget(title: 'Recommended for You', limit: 5),
             const SizedBox(height: 16),
             _SectionHeader(title: 'Near Me'),
             const SizedBox(height: 8),
@@ -131,23 +132,20 @@ class _Promotions extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     child: CachedNetworkImage(
                       imageUrl: promo['image']!,
+                      cacheKey: 'img:banner:${promo['image']}',
+                      cacheManager: AppImageCacheManagers.banners,
                       width: double.infinity,
                       fit: BoxFit.cover,
-                      placeholder: (BuildContext context, String _) => Container(
+                      memCacheWidth: 800,
+                      memCacheHeight: 400,
+                      placeholder: (_, __) => Container(
                         color: Colors.black12,
                         child: const Center(
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                       ),
-                      errorWidget: (
-                        BuildContext context,
-                        String _,
-                        dynamic __,
-                      ) =>
-                          Container(
-                        color: Colors.black12,
-                        child: const Icon(Icons.image_not_supported),
-                      ),
+                      errorWidget: (_, __, ___) =>
+                          const Icon(Icons.broken_image),
                     ),
                   ),
                 ),
@@ -263,24 +261,15 @@ class _NearbyList extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               child: CachedNetworkImage(
                 imageUrl: v.imageUrl,
+                cacheKey: 'img:venue:${v.imageUrl}',
+                cacheManager: AppImageCacheManagers.productImages,
                 width: 120,
                 height: 84,
                 fit: BoxFit.cover,
-                placeholder: (BuildContext context, String _) => Container(
-                  color: Colors.black12,
-                  child: const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-                errorWidget: (
-                  BuildContext context,
-                  String _,
-                  dynamic __,
-                ) =>
-                    Container(
-                  color: Colors.black12,
-                  child: const Icon(Icons.image_not_supported),
-                ),
+                memCacheWidth: 360,
+                memCacheHeight: 252,
+                placeholder: (_, __) => Container(color: Colors.black12),
+                errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
               ),
             ),
           ],

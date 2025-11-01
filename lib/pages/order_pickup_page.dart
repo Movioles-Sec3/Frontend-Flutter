@@ -11,6 +11,12 @@ import 'package:screen_brightness/screen_brightness.dart';
 import '../core/result.dart';
 import '../domain/entities/order.dart';
 import '../domain/usecases/get_my_orders_usecase.dart';
+import '../services/local_orders_storage.dart';
+import '../services/orders_db.dart';
+import '../services/connectivity_service.dart';
+import '../services/orders_sync_service.dart';
+import '../core/strategies/caching_strategy.dart';
+import '../core/strategies/strategy_factory.dart';
 
 class OrderPickupPage extends StatefulWidget {
   final Map<String, dynamic> order;
@@ -27,25 +33,66 @@ class _OrderPickupPageState extends State<OrderPickupPage>
   double? _originalBrightness;
   bool _hasBoostedBrightness = false;
   late Map<String, dynamic> _order;
-  Timer? _statusTimer;
+  StreamSubscription<int>? _statusSub;
   bool _isFetchingStatus = false;
   String? _lastStatus;
   String? _lastReadyTimestamp;
   bool _readyVibrationTriggered = false;
+  bool _online = true;
+  StreamSubscription<bool>? _onlineSub;
 
   @override
   void initState() {
     super.initState();
     _order = Map<String, dynamic>.from(widget.order);
     WidgetsBinding.instance.addObserver(this);
+    // Persist the last order locally for quick access
+    unawaited(LocalOrdersStorage.instance.saveLastOrder(_order));
     _handleOrderStatusChange();
     _boostBrightness();
-    _startOrderStatusPolling();
+    // Initialize connectivity and sync services
+    // ignore: discarded_futures
+    ConnectivityService.instance.initialize();
+    // ignore: discarded_futures
+    OrdersSyncService.instance.start();
+    _online = ConnectivityService.instance.isOnline;
+    _onlineSub = ConnectivityService.instance.online$.listen((bool online) {
+      setState(() {
+        _online = online;
+      });
+      if (online) {
+        _startOrderStatusPolling();
+      } else {
+        _statusSub?.cancel();
+        _statusSub = null;
+      }
+    });
+    if (_online) {
+      _startOrderStatusPolling();
+    }
+
+    // Try to load latest cached version of this order immediately
+    try {
+      final int? orderId = (_order['id'] as num?)?.toInt();
+      if (orderId != null && orderId > 0) {
+        final CacheContext<String> cache = StrategyFactory.createCacheContext();
+        cache.retrieve('order:$orderId').then((CacheResult<String> res) {
+          if (!mounted) return;
+          if (res.success && res.data != null && res.data!.isNotEmpty) {
+            try {
+              final Map<String, dynamic> latest = jsonDecode(res.data!) as Map<String, dynamic>;
+              _updateOrder(latest);
+            } catch (_) {}
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   @override
   void dispose() {
-    _statusTimer?.cancel();
+    _statusSub?.cancel();
+    _onlineSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_restoreBrightness());
     super.dispose();
@@ -69,8 +116,8 @@ class _OrderPickupPageState extends State<OrderPickupPage>
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _restoreBrightness();
-      _statusTimer?.cancel();
-      _statusTimer = null;
+      _statusSub?.cancel();
+      _statusSub = null;
     }
   }
 
@@ -100,16 +147,16 @@ class _OrderPickupPageState extends State<OrderPickupPage>
   }
 
   void _startOrderStatusPolling() {
-    _statusTimer?.cancel();
-    _statusTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => unawaited(_fetchLatestOrder()),
-    );
+    _statusSub?.cancel();
+    _statusSub = Stream<int>.periodic(const Duration(seconds: 5), (int x) => x)
+        .listen((_) {
+      unawaited(_fetchLatestOrder());
+    });
     unawaited(_fetchLatestOrder());
   }
 
   Future<void> _fetchLatestOrder() async {
-    if (!mounted || _isFetchingStatus) return;
+    if (!mounted || _isFetchingStatus || !_online) return;
 
     final int? orderId = (_order['id'] as num?)?.toInt();
     if (orderId == null || orderId <= 0) return;
@@ -154,6 +201,27 @@ class _OrderPickupPageState extends State<OrderPickupPage>
     setState(() {
       _order = Map<String, dynamic>.from(latest);
     });
+    // Update cache for this order id (orders prefix uses LRU strategy)
+    try {
+      final int? orderId = (_order['id'] as num?)?.toInt();
+      if (orderId != null && orderId > 0) {
+        final CacheContext<String> cache = StrategyFactory.createCacheContext();
+        // ignore: discarded_futures
+        cache.store('order:$orderId', jsonEncode(_order), expiration: const Duration(minutes: 10));
+      }
+    } catch (_) {}
+    // Update persisted last order on each refresh
+    unawaited(LocalOrdersStorage.instance.saveLastOrder(_order));
+    final int? orderId = (_order['id'] as num?)?.toInt();
+    if (orderId != null && orderId > 0) {
+      // Persist status changes to DB
+      unawaited(OrdersDb.instance.updateOrderStatus(
+        id: orderId,
+        status: (_order['estado'] ?? '').toString(),
+        readyAt: (_order['fecha_listo'] ?? '').toString().isNotEmpty ? (_order['fecha_listo'] ?? '').toString() : null,
+        deliveredAt: (_order['fecha_entregado'] ?? '').toString().isNotEmpty ? (_order['fecha_entregado'] ?? '').toString() : null,
+      ));
+    }
     _handleOrderStatusChange();
   }
 
@@ -178,8 +246,10 @@ class _OrderPickupPageState extends State<OrderPickupPage>
     _lastReadyTimestamp = readyTimestamp;
 
     if (normalizedStatus == 'ENTREGADO') {
-      _statusTimer?.cancel();
-      _statusTimer = null;
+      _statusSub?.cancel();
+      _statusSub = null;
+      // Optionally clear last order when delivered
+      unawaited(LocalOrdersStorage.instance.clearLastOrder());
     }
   }
 
@@ -243,6 +313,23 @@ class _OrderPickupPageState extends State<OrderPickupPage>
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
           children: [
+            if (!_online)
+              Container(
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange),
+                ),
+                child: const Row(
+                  children: <Widget>[
+                    Icon(Icons.wifi_off, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('You are offline. Status updates will resume once connected.')),
+                  ],
+                ),
+              ),
             const SizedBox(height: 4),
             Center(
               child: Text(
