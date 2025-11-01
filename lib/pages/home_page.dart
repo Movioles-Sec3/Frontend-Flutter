@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'categories_page.dart';
 import 'products_by_category_page.dart';
@@ -128,26 +129,25 @@ class _Promotions extends StatelessWidget {
                 Expanded(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      promo['image']!,
+                    child: CachedNetworkImage(
+                      imageUrl: promo['image']!,
                       width: double.infinity,
                       fit: BoxFit.cover,
-                      loadingBuilder:
-                          (
-                            BuildContext context,
-                            Widget child,
-                            ImageChunkEvent? progress,
-                          ) {
-                            if (progress == null) return child;
-                            return Container(
-                              color: Colors.black12,
-                              child: const Center(
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            );
-                          },
+                      placeholder: (BuildContext context, String _) => Container(
+                        color: Colors.black12,
+                        child: const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                      errorWidget: (
+                        BuildContext context,
+                        String _,
+                        dynamic __,
+                      ) =>
+                          Container(
+                        color: Colors.black12,
+                        child: const Icon(Icons.image_not_supported),
+                      ),
                     ),
                   ),
                 ),
@@ -261,11 +261,26 @@ class _NearbyList extends StatelessWidget {
             const SizedBox(width: 12),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.network(
-                v.imageUrl,
+              child: CachedNetworkImage(
+                imageUrl: v.imageUrl,
                 width: 120,
                 height: 84,
                 fit: BoxFit.cover,
+                placeholder: (BuildContext context, String _) => Container(
+                  color: Colors.black12,
+                  child: const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+                errorWidget: (
+                  BuildContext context,
+                  String _,
+                  dynamic __,
+                ) =>
+                    Container(
+                  color: Colors.black12,
+                  child: const Icon(Icons.image_not_supported),
+                ),
               ),
             ),
           ],

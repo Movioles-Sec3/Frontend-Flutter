@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../core/strategies/recommendation_strategy.dart';
 import '../core/strategies/error_handling_strategy.dart';
@@ -233,15 +234,26 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
                 width: double.infinity,
                 color: Colors.grey[200],
                 child: product.imageUrl.isNotEmpty
-                    ? Image.network(
-                        product.imageUrl,
+                    ? CachedNetworkImage(
+                        imageUrl: product.imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
+                        placeholder: (BuildContext context, String _) =>
+                            Container(
+                          color: Colors.black12,
+                          child: const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                        errorWidget: (
+                          BuildContext context,
+                          String _,
+                          dynamic __,
+                        ) =>
                             const Icon(
-                              Icons.image_not_supported,
-                              size: 48,
-                              color: Colors.grey,
-                            ),
+                          Icons.image_not_supported,
+                          size: 48,
+                          color: Colors.grey,
+                        ),
                       )
                     : const Icon(
                         Icons.image_not_supported,

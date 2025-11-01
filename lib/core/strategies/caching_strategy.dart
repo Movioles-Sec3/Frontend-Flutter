@@ -1,6 +1,6 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'strategy.dart';
 
 /// Cache data model
@@ -89,7 +89,7 @@ class MemoryCachingStrategy<T> extends CachingStrategy<T> {
   String get identifier => 'memory';
 
   final int maxSize;
-  final Map<String, CacheData<T>> _cache = {};
+  final LinkedHashMap<String, CacheData<T>> _cache = LinkedHashMap();
 
   @override
   Future<CacheResult<T>> execute(String key) async {
@@ -99,7 +99,10 @@ class MemoryCachingStrategy<T> extends CachingStrategy<T> {
   @override
   Future<CacheResult<bool>> store(String key, T data, {Duration? expiration}) async {
     try {
-      // Remove oldest entries if cache is full
+      // Remove existing entry to refresh its position (LRU behavior)
+      _cache.remove(key);
+
+      // Remove least recently used entry if cache is full
       if (_cache.length >= maxSize) {
         final oldestKey = _cache.keys.first;
         _cache.remove(oldestKey);
@@ -125,7 +128,7 @@ class MemoryCachingStrategy<T> extends CachingStrategy<T> {
   @override
   Future<CacheResult<T>> retrieve(String key) async {
     try {
-      final cacheData = _cache[key];
+      final cacheData = _cache.remove(key);
       if (cacheData == null) {
         return CacheResult.failure('Key not found in memory cache');
       }
@@ -134,6 +137,9 @@ class MemoryCachingStrategy<T> extends CachingStrategy<T> {
         _cache.remove(key);
         return CacheResult.failure('Cache entry expired');
       }
+
+      // Re-insert to mark as most recently used
+      _cache[key] = cacheData;
 
       return CacheResult.success(cacheData.data);
     } catch (e) {
@@ -164,8 +170,21 @@ class MemoryCachingStrategy<T> extends CachingStrategy<T> {
   @override
   Future<CacheResult<bool>> exists(String key) async {
     try {
-      final exists = _cache.containsKey(key) && !_cache[key]!.isExpired;
-      return CacheResult.success(exists);
+      final cacheData = _cache[key];
+      if (cacheData == null) {
+        return CacheResult.success(false);
+      }
+
+      if (cacheData.isExpired) {
+        _cache.remove(key);
+        return CacheResult.success(false);
+      }
+
+      // Touch to keep entry fresh in LRU ordering
+      _cache.remove(key);
+      _cache[key] = cacheData;
+
+      return CacheResult.success(true);
     } catch (e) {
       return CacheResult.failure('Failed to check existence in memory cache: $e');
     }
@@ -344,7 +363,10 @@ class HybridCachingStrategy<T> extends CachingStrategy<T> {
       final fileResult = await fileStrategy.retrieve(key);
       if (fileResult.success) {
         // Store in memory for future access
-        await memoryStrategy.store(key, fileResult.data!);
+        final T? data = fileResult.data;
+        if (data != null) {
+          await memoryStrategy.store(key, data);
+        }
         return fileResult;
       }
 

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import '../services/cart_service.dart';
@@ -139,11 +140,27 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
                           color: Colors.grey[300],
                           child: const Icon(Icons.image_outlined),
                         )
-                      : Image.network(
-                          imagenUrl,
+                      : CachedNetworkImage(
+                          imageUrl: imagenUrl,
                           width: 110,
                           height: 90,
                           fit: BoxFit.cover,
+                          placeholder: (BuildContext context, String _) =>
+                              Container(
+                            color: Colors.black12,
+                            child: const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                          errorWidget: (
+                            BuildContext context,
+                            String _,
+                            dynamic __,
+                          ) =>
+                              Container(
+                            color: Colors.black12,
+                            child: const Icon(Icons.image_not_supported),
+                          ),
                         ),
                 ),
                 const SizedBox(width: 12),

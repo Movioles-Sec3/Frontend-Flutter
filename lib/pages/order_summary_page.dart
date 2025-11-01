@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tapandtoast/pages/order_pickup_page.dart';
 import 'package:intl/intl.dart';
@@ -141,7 +142,21 @@ class _EditableProductTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Widget image = item.imageUrl.startsWith('http')
-        ? Image.network(item.imageUrl, fit: BoxFit.cover)
+        ? CachedNetworkImage(
+            imageUrl: item.imageUrl,
+            fit: BoxFit.cover,
+            placeholder: (BuildContext context, String _) => Container(
+              color: Colors.black12,
+              child: const Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+            errorWidget: (BuildContext context, String _, dynamic __) =>
+                Container(
+              color: Colors.black12,
+              child: const Icon(Icons.image_not_supported),
+            ),
+          )
         : Image.asset(item.imageUrl, fit: BoxFit.cover);
 
     return Container(
