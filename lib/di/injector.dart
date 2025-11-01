@@ -2,6 +2,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:get_it/get_it.dart';
 
 import '../core/api_client.dart';
+import '../core/strategies/caching_strategy.dart';
 import '../core/strategies/strategy_factory.dart';
 import '../data/repositories/auth_repository_impl.dart';
 import '../data/repositories/order_repository_impl.dart';
@@ -26,6 +27,8 @@ import '../domain/usecases/login_usecase.dart';
 import '../domain/usecases/recharge_usecase.dart';
 import '../domain/usecases/register_usecase.dart';
 import '../domain/usecases/submit_seat_delivery_survey_usecase.dart';
+import '../services/form_cache_service.dart';
+import '../services/profile_local_storage.dart';
 import '../services/session_manager.dart';
 
 final GetIt injector = GetIt.instance;
@@ -108,4 +111,15 @@ Future<void> setupDependencies() async {
     injector.get<GetRecommendedProductsUseCase>(),
   ));
   injector.registerLazySingleton(() => StrategyFactory.createCurrencyDisplayContext());
+
+  // Services
+  injector.registerLazySingleton<MemoryCachingStrategy<String>>(
+    () => MemoryCachingStrategy<String>(maxSize: 16),
+  );
+  injector.registerLazySingleton<FormCacheService>(
+    () => FormCacheService(injector.get<MemoryCachingStrategy<String>>()),
+  );
+  final ProfileLocalStorage profileLocalStorage = ProfileLocalStorage();
+  await profileLocalStorage.init();
+  injector.registerSingleton<ProfileLocalStorage>(profileLocalStorage);
 }

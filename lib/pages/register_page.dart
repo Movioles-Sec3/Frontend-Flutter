@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import '../core/result.dart';
 import '../domain/usecases/register_usecase.dart';
+import '../services/form_cache_service.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -15,7 +16,34 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final FormCacheService _formCacheService = GetIt.I.get<FormCacheService>();
   bool _isLoading = false;
+
+  bool _hasDisallowedCharacters(String value) {
+    return RegExp(r'[^\x20-\x7E]').hasMatch(value);
+  }
+
+  Future<void> _restoreCachedDraft() async {
+    final Map<String, String>? draft =
+        await _formCacheService.getRegisterDraft();
+    if (!mounted || draft == null) return;
+
+    if (draft['name'] != null && draft['name']!.isNotEmpty) {
+      _nameController.text = draft['name']!;
+    }
+    if (draft['email'] != null && draft['email']!.isNotEmpty) {
+      _emailController.text = draft['email']!;
+    }
+    if (draft['password'] != null && draft['password']!.isNotEmpty) {
+      _passwordController.text = draft['password']!;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreCachedDraft();
+  }
 
   @override
   void dispose() {
@@ -42,14 +70,35 @@ class _RegisterPageState extends State<RegisterPage> {
     if (!mounted) return;
 
     if (result.isSuccess) {
+      await _formCacheService.clearRegisterDraft();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Account created successfully')),
       );
       Navigator.pop(context, true);
     } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(result.error!)));
+      final String error = result.error ?? 'Registration failed';
+      final bool offline = error.toLowerCase().contains('network error');
+
+      if (offline) {
+        await _formCacheService.saveRegisterDraft(
+          name: _nameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Necesitas una conexión a internet para completar tu registro. Inténtalo nuevamente cuando tengas acceso.',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error)),
+        );
+      }
     }
 
     if (mounted) {
@@ -101,6 +150,9 @@ class _RegisterPageState extends State<RegisterPage> {
                           if (value == null || value.trim().isEmpty) {
                             return 'Enter your name';
                           }
+                          if (_hasDisallowedCharacters(value)) {
+                            return 'Remove emojis or invalid characters';
+                          }
                           return null;
                         },
                       ),
@@ -122,6 +174,9 @@ class _RegisterPageState extends State<RegisterPage> {
                           if (v.isEmpty) return 'Enter your email';
                           final bool ok = RegExp(r'^.+@.+\..+?').hasMatch(v);
                           if (!ok) return 'Invalid email';
+                          if (_hasDisallowedCharacters(v)) {
+                            return 'Use standard email characters only';
+                          }
                           return null;
                         },
                       ),
@@ -141,6 +196,9 @@ class _RegisterPageState extends State<RegisterPage> {
                         validator: (String? value) {
                           if ((value ?? '').length < 6) {
                             return 'Minimum 6 characters';
+                          }
+                          if (_hasDisallowedCharacters(value ?? '')) {
+                            return 'Remove emojis or unsupported characters';
                           }
                           return null;
                         },

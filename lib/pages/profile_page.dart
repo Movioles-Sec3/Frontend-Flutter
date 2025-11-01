@@ -1,10 +1,16 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data' show Uint8List;
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:get_it/get_it.dart';
 import 'package:image_picker/image_picker.dart';
+import '../di/injector.dart';
 import '../services/session_manager.dart';
+import '../services/profile_local_storage.dart';
 import '../services/profile_photo_service.dart';
 import '../core/result.dart';
 import '../domain/entities/user.dart';
@@ -31,14 +37,27 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _surveySubmitting = false;
   final ImagePicker _imagePicker = ImagePicker();
   late final ProfilePhotoService _photoService;
+  late final ProfileLocalStorage _profileLocalStorage;
   Uint8List? _profilePhotoBytes;
+  bool _isOffline = false;
+  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
     _photoService = ProfilePhotoService.instance;
+    _profileLocalStorage = injector.get<ProfileLocalStorage>();
     _profilePhotoBytes = _photoService.photoBytes;
     _photoService.addListener(_handlePhotoChange);
+    _connectivitySubscription = Connectivity()
+        .onConnectivityChanged
+        .listen((ConnectivityResult result) {
+      _handleConnectivityChange(result);
+    });
+    Connectivity().checkConnectivity().then((ConnectivityResult result) {
+      if (!mounted) return;
+      _handleConnectivityChange(result, showFeedback: false);
+    });
     _load();
   }
 
@@ -61,19 +80,71 @@ class _ProfilePageState extends State<ProfilePage> {
     if (!mounted) return;
 
     if (result.isSuccess) {
+      final UserEntity user = result.data!;
+      await _profileLocalStorage.saveUser(user);
+      if (!mounted) return;
       setState(() {
-        _user = result.data!;
+        _user = user;
         _loading = false;
+        _isOffline = false;
+        _error = null;
       });
     } else {
-      setState(() {
-        _error = result.error;
-        _loading = false;
-      });
+      final ConnectivityResult connectivityResult =
+          await Connectivity().checkConnectivity();
+      _handleConnectivityChange(connectivityResult, showFeedback: false);
+      final bool offline = connectivityResult == ConnectivityResult.none;
+      final UserEntity? cached = await _profileLocalStorage.getUser();
+      if (!mounted) return;
+      if (cached != null) {
+        setState(() {
+          _user = cached;
+          _loading = false;
+          _error = offline ? null : result.error;
+          _isOffline = offline;
+        });
+        if (offline) {
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'No internet connection. Showing saved profile.',
+                ),
+              ),
+            );
+        }
+      } else {
+        setState(() {
+          _error = result.error;
+          _loading = false;
+          _isOffline = offline;
+        });
+        if (offline) {
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              const SnackBar(
+                content: Text('No internet connection. Try again later.'),
+              ),
+            );
+        }
+      }
     }
   }
 
   Future<void> _captureProfilePhoto() async {
+    if (_isOffline) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Cannot use the camera while offline.'),
+          ),
+        );
+      return;
+    }
     try {
       final XFile? photo = await _imagePicker.pickImage(
         source: ImageSource.camera,
@@ -84,7 +155,9 @@ class _ProfilePageState extends State<ProfilePage> {
       );
       if (photo == null) return;
 
-      final Uint8List bytes = await photo.readAsBytes();
+      final Uint8List bytes = photo.path.isNotEmpty
+          ? await _loadPhotoBytesIsolate(photo.path)
+          : await photo.readAsBytes();
       _photoService.update(bytes);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -103,15 +176,55 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<Uint8List> _loadPhotoBytesIsolate(String path) {
+    return Isolate.run(() => File(path).readAsBytesSync());
+  }
+
+  void _handleConnectivityChange(ConnectivityResult result,
+      {bool showFeedback = true}) {
+    if (!mounted) return;
+    final bool offline = result == ConnectivityResult.none;
+    if (offline != _isOffline) {
+      setState(() {
+        _isOffline = offline;
+      });
+      if (showFeedback) {
+        final ScaffoldMessengerState messenger =
+            ScaffoldMessenger.of(context);
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              offline
+                  ? 'No internet connection. Some actions are disabled.'
+                  : 'Back online. You can use all actions again.',
+            ),
+          ),
+        );
+      }
+    } else if (showFeedback && offline) {
+      final ScaffoldMessengerState messenger =
+          ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('No internet connection. Some actions are disabled.'),
+        ),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _photoService.removeListener(_handlePhotoChange);
     _seatDeliveryFeedbackCtrl.dispose();
+    _connectivitySubscription?.cancel();
     super.dispose();
   }
 
   Future<void> _logout() async {
     await SessionManager.clear();
+    await _profileLocalStorage.clear();
     _photoService.clear();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
@@ -168,8 +281,11 @@ class _ProfilePageState extends State<ProfilePage> {
     if (!mounted) return;
 
     if (result.isSuccess) {
+      final UserEntity updatedUser = result.data!;
+      await _profileLocalStorage.saveUser(updatedUser);
+      if (!mounted) return;
       setState(() {
-        _user = result.data!;
+        _user = updatedUser;
       });
       ScaffoldMessenger.of(
         context,
@@ -264,6 +380,21 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
+            if (_isOffline)
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orangeAccent),
+                ),
+                child: const Text(
+                  'No internet connection. Please reconnect and try again.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.orangeAccent),
+                ),
+              ),
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 12),
             ElevatedButton(onPressed: _load, child: const Text('Retry')),
@@ -285,11 +416,26 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            if (_isOffline)
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orangeAccent),
+                ),
+                child: const Text(
+                  'No internet connection. You are seeing saved information.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.orangeAccent),
+                ),
+              ),
             Center(
               child: _ProfileAvatar(
                 displayName: nombre,
                 photoBytes: _profilePhotoBytes,
-                onCaptureTap: _captureProfilePhoto,
+                onCaptureTap: _isOffline ? null : _captureProfilePhoto,
               ),
             ),
             const SizedBox(height: 16),
@@ -346,7 +492,7 @@ class _ProfilePageState extends State<ProfilePage> {
             SizedBox(
               height: 48,
               child: ElevatedButton.icon(
-                onPressed: _showRechargeDialog,
+                onPressed: _isOffline ? null : _showRechargeDialog,
                 icon: const Icon(Icons.account_balance_wallet_outlined),
                 label: const Text('Add funds'),
               ),
@@ -375,18 +521,19 @@ class _ProfileAvatar extends StatelessWidget {
   const _ProfileAvatar({
     required this.displayName,
     required this.photoBytes,
-    required this.onCaptureTap,
+    this.onCaptureTap,
   });
 
   final String displayName;
   final Uint8List? photoBytes;
-  final VoidCallback onCaptureTap;
+  final VoidCallback? onCaptureTap;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ImageProvider<Object>? imageProvider =
         photoBytes == null ? null : MemoryImage(photoBytes!);
+    final bool isEnabled = onCaptureTap != null;
 
     return SizedBox(
       width: 112,
@@ -413,7 +560,9 @@ class _ProfileAvatar extends StatelessWidget {
             bottom: 0,
             right: 0,
             child: Material(
-              color: theme.colorScheme.primary,
+              color: isEnabled
+                  ? theme.colorScheme.primary
+                  : theme.disabledColor,
               shape: const CircleBorder(),
               child: InkWell(
                 customBorder: const CircleBorder(),
@@ -423,7 +572,9 @@ class _ProfileAvatar extends StatelessWidget {
                   child: Icon(
                     Icons.camera_alt_outlined,
                     size: 18,
-                    color: theme.colorScheme.onPrimary,
+                    color: isEnabled
+                        ? theme.colorScheme.onPrimary
+                        : theme.colorScheme.onSurface,
                   ),
                 ),
               ),

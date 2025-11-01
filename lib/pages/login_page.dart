@@ -4,6 +4,7 @@ import '../domain/usecases/login_usecase.dart';
 import '../core/result.dart';
 import '../main.dart';
 import 'register_page.dart';
+import '../services/form_cache_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -15,13 +16,37 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final FormCacheService _formCacheService = GetIt.I.get<FormCacheService>();
   bool _isLoading = false;
+
+  bool _hasDisallowedCharacters(String value) {
+    return RegExp(r'[^\x20-\x7E]').hasMatch(value);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreCachedDraft();
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _restoreCachedDraft() async {
+    final Map<String, String>? draft =
+        await _formCacheService.getLoginDraft();
+    if (!mounted || draft == null) return;
+
+    if (draft['email'] != null && draft['email']!.isNotEmpty) {
+      _emailController.text = draft['email']!;
+    }
+    if (draft['password'] != null && draft['password']!.isNotEmpty) {
+      _passwordController.text = draft['password']!;
+    }
   }
 
   Future<void> _login() async {
@@ -31,6 +56,15 @@ class _LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Enter email and password')));
+      return;
+    }
+
+    if (_hasDisallowedCharacters(email) || _hasDisallowedCharacters(password)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Remove emojis or invalid characters from email and password.'),
+        ),
+      );
       return;
     }
 
@@ -44,6 +78,8 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
 
     if (result.isSuccess) {
+      await _formCacheService.clearLoginDraft();
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute<void>(
@@ -51,9 +87,27 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
     } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(result.error!)));
+      final String error = result.error ?? 'Login failed';
+      final bool offline = error.toLowerCase().contains('network error');
+
+      if (offline) {
+        await _formCacheService.saveLoginDraft(
+          email: email,
+          password: password,
+        );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Necesitas una conexión a internet para iniciar sesión. Conservamos tus datos para que lo intentes más tarde.',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error)));
+      }
     }
 
     if (mounted) {

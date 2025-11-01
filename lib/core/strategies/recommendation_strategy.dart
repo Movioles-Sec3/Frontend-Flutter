@@ -1,7 +1,6 @@
 import 'strategy.dart';
 import '../../domain/entities/product_recommendation.dart';
 import '../../domain/usecases/get_recommended_products_usecase.dart';
-import '../../core/result.dart';
 
 /// Recommendation request data
 class RecommendationRequest {
@@ -221,4 +220,3 @@ class RecommendationContext {
     return strategies.map((s) => s.identifier).toList();
   }
 }
-
