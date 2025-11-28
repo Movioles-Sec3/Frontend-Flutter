@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data' show Uint8List;
@@ -8,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:get_it/get_it.dart';
 import 'package:image_picker/image_picker.dart';
+import '../core/strategies/caching_strategy.dart';
 import '../di/injector.dart';
 import '../services/session_manager.dart';
 import '../services/profile_local_storage.dart';
@@ -30,6 +32,7 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _loading = true;
   String? _error;
   UserEntity? _user;
+  bool _loadedFromCache = false;
   String? _seatDeliveryInterest;
   double _prepImpactMinutes = 5;
   final TextEditingController _seatDeliveryFeedbackCtrl = TextEditingController();
@@ -38,6 +41,8 @@ class _ProfilePageState extends State<ProfilePage> {
   final ImagePicker _imagePicker = ImagePicker();
   late final ProfilePhotoService _photoService;
   late final ProfileLocalStorage _profileLocalStorage;
+  late final CacheContext<String> _cacheContext;
+  static const String _profileCacheKey = 'profile:user';
   Uint8List? _profilePhotoBytes;
   bool _isOffline = false;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
@@ -47,6 +52,7 @@ class _ProfilePageState extends State<ProfilePage> {
     super.initState();
     _photoService = ProfilePhotoService.instance;
     _profileLocalStorage = injector.get<ProfileLocalStorage>();
+    _cacheContext = injector.get<CacheContext<String>>();
     _profilePhotoBytes = _photoService.photoBytes;
     _photoService.addListener(_handlePhotoChange);
     _connectivitySubscription = Connectivity()
@@ -74,6 +80,8 @@ class _ProfilePageState extends State<ProfilePage> {
       _error = null;
     });
 
+    await _hydrateFromCache();
+
     final GetMeUseCase useCase = GetIt.I.get<GetMeUseCase>();
     final Result<UserEntity> result = await useCase();
 
@@ -82,6 +90,7 @@ class _ProfilePageState extends State<ProfilePage> {
     if (result.isSuccess) {
       final UserEntity user = result.data!;
       await _profileLocalStorage.saveUser(user);
+      await _cacheUser(user);
       if (!mounted) return;
       setState(() {
         _user = user;
@@ -97,10 +106,13 @@ class _ProfilePageState extends State<ProfilePage> {
       final UserEntity? cached = await _profileLocalStorage.getUser();
       if (!mounted) return;
       if (cached != null) {
+        await _cacheUser(cached);
         setState(() {
           _user = cached;
           _loading = false;
-          _error = offline ? null : result.error;
+          _error = offline
+              ? null
+              : 'No se pudo cargar el perfil. Inténtalo de nuevo.';
           _isOffline = offline;
         });
         if (offline) {
@@ -116,7 +128,9 @@ class _ProfilePageState extends State<ProfilePage> {
         }
       } else {
         setState(() {
-          _error = result.error;
+          _error = offline
+              ? 'No pudimos cargar el perfil sin conexión. Revisa tu internet e inténtalo otra vez.'
+              : 'No se pudo cargar el perfil. Inténtalo de nuevo.';
           _loading = false;
           _isOffline = offline;
         });
@@ -131,6 +145,34 @@ class _ProfilePageState extends State<ProfilePage> {
         }
       }
     }
+  }
+
+  Future<void> _hydrateFromCache() async {
+    final CacheResult<String> cached = await _cacheContext.retrieve(_profileCacheKey);
+    if (!cached.success || cached.data == null) return;
+    try {
+      final Map<String, dynamic> json =
+          jsonDecode(cached.data!) as Map<String, dynamic>;
+      final UserEntity user = UserEntity.fromJson(json);
+      if (!mounted) return;
+      setState(() {
+        _user = user;
+        _loading = false;
+        _loadedFromCache = true;
+      });
+    } catch (_) {
+      // Ignore cache parse errors
+    }
+  }
+
+  Future<void> _cacheUser(UserEntity user) async {
+    final Map<String, dynamic> payload = <String, dynamic>{
+      'id': user.id,
+      'nombre': user.name,
+      'email': user.email,
+      'saldo': user.balance,
+    };
+    await _cacheContext.store(_profileCacheKey, jsonEncode(payload));
   }
 
   Future<void> _captureProfilePhoto() async {
