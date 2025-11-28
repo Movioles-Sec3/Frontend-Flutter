@@ -113,11 +113,12 @@ Future<void> setupDependencies() async {
   injector.registerLazySingleton(() => StrategyFactory.createCurrencyDisplayContext());
 
   // Services
-  injector.registerLazySingleton<MemoryCachingStrategy<String>>(
-    () => MemoryCachingStrategy<String>(maxSize: 16),
+  // Use SharedPreferences-backed cache for auth form drafts so they persist across sessions
+  injector.registerLazySingleton<PreferencesCachingStrategy>(
+    () => PreferencesCachingStrategy(),
   );
   injector.registerLazySingleton<FormCacheService>(
-    () => FormCacheService(injector.get<MemoryCachingStrategy<String>>()),
+    () => FormCacheService(injector.get<PreferencesCachingStrategy>()),
   );
   final ProfileLocalStorage profileLocalStorage = ProfileLocalStorage();
   await profileLocalStorage.init();

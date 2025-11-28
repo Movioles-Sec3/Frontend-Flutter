@@ -91,6 +91,7 @@ class StrategyFactory {
           'categories:',
           'category:',
           'products:',
+          'profile:',
         ],
       ),
     );
