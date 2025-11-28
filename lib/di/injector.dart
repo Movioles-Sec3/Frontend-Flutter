@@ -29,6 +29,7 @@ import '../domain/usecases/register_usecase.dart';
 import '../domain/usecases/submit_seat_delivery_survey_usecase.dart';
 import '../services/form_cache_service.dart';
 import '../services/profile_local_storage.dart';
+import '../services/product_local_storage.dart';
 import '../services/session_manager.dart';
 
 final GetIt injector = GetIt.instance;
@@ -122,4 +123,10 @@ Future<void> setupDependencies() async {
   final ProfileLocalStorage profileLocalStorage = ProfileLocalStorage();
   await profileLocalStorage.init();
   injector.registerSingleton<ProfileLocalStorage>(profileLocalStorage);
+
+  final ProductLocalStorage productLocalStorage = ProductLocalStorage(
+    defaultTtl: const Duration(hours: 12),
+  );
+  await productLocalStorage.init();
+  injector.registerSingleton<ProductLocalStorage>(productLocalStorage);
 }

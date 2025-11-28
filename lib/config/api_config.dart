@@ -1,6 +1,6 @@
 class ApiConfig {
   // For local development - make sure your backend server is running on this port
-  static const String baseUrl = 'http://192.168.2.58:8080';
+  static const String baseUrl = 'http://192.168.80.10:8080';
 
   // Alternative configurations:
   // static const String baseUrl = 'http://localhost:8000';  // Alternative local address

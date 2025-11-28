@@ -100,7 +100,7 @@ class _ProfilePageState extends State<ProfilePage> {
         setState(() {
           _user = cached;
           _loading = false;
-          _error = offline ? null : result.error;
+          _error = offline ? null : (result.error ?? 'Unable to load profile');
           _isOffline = offline;
         });
         if (offline) {
@@ -116,7 +116,9 @@ class _ProfilePageState extends State<ProfilePage> {
         }
       } else {
         setState(() {
-          _error = result.error;
+          _error = offline
+              ? 'No internet connection.'
+              : (result.error ?? 'Unable to load profile');
           _loading = false;
           _isOffline = offline;
         });
