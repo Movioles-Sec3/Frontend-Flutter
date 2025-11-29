@@ -52,13 +52,19 @@ class _ProductPageState extends State<ProductPage> {
     );
     if (cached != null) return cached;
 
+    final String cachedNote = await _loadCachedNote(product.id);
+    final int? cachedTimesOrdered = await _loadCachedOrderCount(product.id);
     final PreparedProductData? fromDisk = await _productLocalStorage.getProduct(
       product.id,
       maxAge: const Duration(hours: 12),
     );
     if (fromDisk != null) {
-      ProductDetailCache.instance.put(fromDisk);
-      return fromDisk;
+      final PreparedProductData enriched = fromDisk.copyWith(
+        note: cachedNote.isEmpty ? fromDisk.note : cachedNote,
+        timesOrdered: cachedTimesOrdered ?? fromDisk.timesOrdered,
+      );
+      ProductDetailCache.instance.put(enriched);
+      return enriched;
     }
 
     final PreparedProductData data =
@@ -66,19 +72,64 @@ class _ProductPageState extends State<ProductPage> {
           prepareProductData,
           ProductInput.fromEntity(product),
         );
-    ProductDetailCache.instance.put(data);
-    await _productLocalStorage.saveProduct(data);
-    return data;
+    final PreparedProductData enriched = data.copyWith(
+      note: cachedNote,
+      timesOrdered: cachedTimesOrdered ?? data.timesOrdered,
+    );
+    ProductDetailCache.instance.put(enriched);
+    await _productLocalStorage.saveProduct(enriched);
+    return enriched;
+  }
+
+  Future<String> _loadCachedNote(int productId) async {
+    try {
+      return (await _productLocalStorage.getNote(productId)).trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<int?> _loadCachedOrderCount(int productId) async {
+    try {
+      return await _productLocalStorage.getOrderCount(productId);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<int> _loadOrderedCount(int productId) async {
+    final int cached = (await _loadCachedOrderCount(productId)) ?? 0;
     try {
       final List<Map<String, dynamic>> items =
           await OrdersDb.instance.getOrderItemsByProduct(productId);
-      return compute(_sumQuantities, items);
+      final int fresh = await compute(_sumQuantities, items);
+      final int best = (fresh == 0 && cached > 0) ? cached : fresh;
+      await _persistOrderCount(productId, best);
+      return best;
     } catch (_) {
-      return 0;
+      return cached;
     }
+  }
+
+  Future<void> _persistOrderCount(int productId, int timesOrdered) async {
+    PreparedProductData? cached = ProductDetailCache.instance.get(productId);
+    cached ??= await _productLocalStorage.getProduct(productId);
+    if (cached != null) {
+      final PreparedProductData updated =
+          cached.copyWith(timesOrdered: timesOrdered);
+      ProductDetailCache.instance.put(updated);
+      await _productLocalStorage.saveProduct(updated);
+      return;
+    }
+
+    final PreparedProductData fallback = PreparedProductData.fromEntity(
+      widget.product,
+    ).copyWith(
+      note: await _loadCachedNote(productId),
+      timesOrdered: timesOrdered,
+    );
+    ProductDetailCache.instance.put(fallback);
+    await _productLocalStorage.saveProduct(fallback);
   }
 
   void _increment() => setState(() => _quantity = (_quantity + 1).clamp(1, 20));
@@ -280,6 +331,7 @@ class _ProductPageState extends State<ProductPage> {
                 const SizedBox(height: 12),
                 FutureBuilder<int>(
                   future: _orderCountFuture,
+                  initialData: data.timesOrdered,
                   builder: (BuildContext context, AsyncSnapshot<int> snap) {
                     final bool loading = snap.connectionState != ConnectionState.done;
                     final int timesOrdered = snap.data ?? 0;
