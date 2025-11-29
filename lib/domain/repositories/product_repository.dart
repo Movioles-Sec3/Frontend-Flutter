@@ -7,6 +7,7 @@ abstract class ProductRepository {
   Future<Result<List<ProductEntity>>> searchByName(
     String name, {
     bool? available,
+    bool includeAvailabilityFilter,
     int? limit,
   });
 }

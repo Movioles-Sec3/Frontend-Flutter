@@ -55,6 +55,7 @@ class ProductRepositoryImpl implements ProductRepository {
   Future<Result<List<ProductEntity>>> searchByName(
     String name, {
     bool? available,
+    bool includeAvailabilityFilter = true,
     int? limit,
   }) async {
     if (name.trim().isEmpty) {
@@ -64,10 +65,10 @@ class ProductRepositoryImpl implements ProductRepository {
     final StringBuffer path = StringBuffer('/productos/buscar?nombre=');
     path.write(Uri.encodeQueryComponent(name.trim()));
 
-    if (available != null) {
+    if (includeAvailabilityFilter && available != null) {
       path
         ..write('&disponible=')
-        ..write(available.toString());
+        ..write(available ? 'true' : 'false');
     }
 
     if (limit != null) {

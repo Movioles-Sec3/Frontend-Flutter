@@ -8,7 +8,6 @@ import '../core/result.dart';
 import '../domain/entities/product.dart';
 import '../domain/usecases/search_products_usecase.dart';
 import '../services/cart_service.dart';
-import '../services/image_cache_manager.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -18,55 +17,37 @@ class SearchPage extends StatefulWidget {
 }
 
 class _SearchPageState extends State<SearchPage> {
+  static const Duration _debounceDuration = Duration(milliseconds: 350);
+
   final TextEditingController _controller = TextEditingController();
-  final FocusNode _focusNode = FocusNode();
-  final CartService _cartService = CartService.instance;
+  final SearchProductsUseCase _searchProductsUseCase = GetIt.I
+      .get<SearchProductsUseCase>();
 
   Timer? _debounce;
   bool _isLoading = false;
-  bool _onlyAvailable = true;
-  String _query = '';
+  bool _includeUnavailable = false;
   String? _error;
   List<ProductEntity> _results = <ProductEntity>[];
 
   @override
-  void initState() {
-    super.initState();
-    _focusNode.requestFocus();
-    _controller.addListener(_onQueryChanged);
-  }
-
-  @override
   void dispose() {
     _debounce?.cancel();
-    _controller
-      ..removeListener(_onQueryChanged)
-      ..dispose();
-    _focusNode.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
-  void _onQueryChanged() {
-    final String next = _controller.text;
-    if (next == _query) return;
-
-    _query = next;
-    _error = null;
-
+  void _onQueryChanged(String value) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () {
-      if (!mounted) return;
-      _performSearch(_query);
-    });
+    _debounce = Timer(_debounceDuration, () => _search(value));
   }
 
-  Future<void> _performSearch(String rawQuery) async {
+  Future<void> _search(String rawQuery) async {
     final String query = rawQuery.trim();
     if (query.isEmpty) {
       setState(() {
         _results = <ProductEntity>[];
-        _isLoading = false;
         _error = null;
+        _isLoading = false;
       });
       return;
     }
@@ -76,11 +57,10 @@ class _SearchPageState extends State<SearchPage> {
       _error = null;
     });
 
-    final SearchProductsUseCase useCase = GetIt.I.get<SearchProductsUseCase>();
-    final Result<List<ProductEntity>> result = await useCase(
-      query,
-      available: _onlyAvailable ? true : null,
-      limit: 30,
+    final Result<List<ProductEntity>> result = await _searchProductsUseCase(
+      query: query,
+      includeUnavailable: _includeUnavailable,
+      limit: 20,
     );
 
     if (!mounted) return;
@@ -92,22 +72,22 @@ class _SearchPageState extends State<SearchPage> {
       });
     } else {
       setState(() {
-        _error = result.error ?? 'No se pudo completar la búsqueda.';
+        _error = result.error ?? 'We could not complete the search.';
         _results = <ProductEntity>[];
         _isLoading = false;
       });
     }
   }
 
-  void _toggleAvailability(bool value) {
+  void _toggleIncludeUnavailable(bool value) {
     setState(() {
-      _onlyAvailable = value;
+      _includeUnavailable = value;
     });
-    _performSearch(_query);
+    _search(_controller.text);
   }
 
   void _addToCart(ProductEntity product) {
-    _cartService.addOrIncrement(
+    CartService.instance.addOrIncrement(
       productId: product.id,
       name: product.name,
       imageUrl: product.imageUrl,
@@ -116,7 +96,7 @@ class _SearchPageState extends State<SearchPage> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${product.name} agregado al carrito'),
+        content: Text('${product.name} added to cart'),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -124,213 +104,227 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Buscar'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(64),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: TextField(
+    final ThemeData theme = Theme.of(context);
+    final bool hasQuery = _controller.text.trim().isNotEmpty;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: <Widget>[
+            TextField(
               controller: _controller,
-              focusNode: _focusNode,
+              onChanged: _onQueryChanged,
               textInputAction: TextInputAction.search,
-              onSubmitted: _performSearch,
               decoration: InputDecoration(
+                hintText: 'Search products...',
                 prefixIcon: const Icon(Icons.search),
-                hintText: 'Busca por nombre (ej. mojito)',
-                filled: true,
-                fillColor: Theme.of(
-                  context,
-                ).colorScheme.surfaceContainerHighest.withOpacity(0.6),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
+                suffixIcon: _controller.text.isNotEmpty
+                    ? IconButton(
+                        onPressed: () {
+                          _controller.clear();
+                          _search('');
+                        },
+                        icon: const Icon(Icons.close),
+                        tooltip: 'Limpiar búsqueda',
+                      )
+                    : null,
               ),
             ),
-          ),
+            const SizedBox(height: 12),
+            SwitchListTile(
+              value: _includeUnavailable,
+              onChanged: _toggleIncludeUnavailable,
+              title: const Text('Show unavailable products'),
+              contentPadding: EdgeInsets.zero,
+            ),
+            const SizedBox(height: 12),
+            if (_isLoading) const LinearProgressIndicator(),
+            const SizedBox(height: 12),
+            Expanded(child: _buildResults(theme, hasQuery)),
+          ],
         ),
-      ),
-      body: Column(
-        children: <Widget>[
-          SwitchListTile(
-            value: _onlyAvailable,
-            onChanged: _toggleAvailability,
-            secondary: const Icon(Icons.check_circle_outline),
-            title: const Text('Mostrar solo disponibles'),
-          ),
-          const Divider(height: 1),
-          Expanded(child: _buildBody()),
-        ],
       ),
     );
   }
 
-  Widget _buildBody() {
-    if (_query.trim().isEmpty) {
-      return _buildEmptyState(
-        icon: Icons.search,
-        message: 'Empieza a escribir para buscar productos.',
-      );
-    }
-
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
+  Widget _buildResults(ThemeData theme, bool hasQuery) {
     if (_error != null) {
-      return _buildEmptyState(
-        icon: Icons.error_outline,
-        message: _error!,
-        action: TextButton(
-          onPressed: () => _performSearch(_query),
-          child: const Text('Reintentar'),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.error_outline, color: theme.colorScheme.error, size: 40),
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () => _search(_controller.text),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try again'),
+            ),
+          ],
         ),
       );
     }
 
     if (_results.isEmpty) {
-      return _buildEmptyState(
-        icon: Icons.inventory_2_outlined,
-        message: 'No encontramos coincidencias con “$_query”.',
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(
+                Icons.travel_explore_outlined,
+                size: 48,
+                color: theme.colorScheme.primary.withOpacity(0.6),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                hasQuery
+                    ? 'No products match your search.'
+                    : 'Type a product name to start searching.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
       );
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.all(16),
       itemCount: _results.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (BuildContext context, int index) {
         final ProductEntity product = _results[index];
-        return _SearchResultCard(
+        return _ProductResultTile(
           product: product,
           onAddToCart: () => _addToCart(product),
         );
       },
     );
   }
-
-  Widget _buildEmptyState({
-    required IconData icon,
-    required String message,
-    Widget? action,
-  }) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Icon(icon, size: 56, color: Colors.grey.shade500),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
-            ),
-            if (action != null) ...<Widget>[const SizedBox(height: 12), action],
-          ],
-        ),
-      ),
-    );
-  }
 }
 
-class _SearchResultCard extends StatelessWidget {
-  const _SearchResultCard({required this.product, required this.onAddToCart});
+class _ProductResultTile extends StatelessWidget {
+  const _ProductResultTile({required this.product, required this.onAddToCart});
 
   final ProductEntity product;
   final VoidCallback onAddToCart;
 
   @override
   Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final bool isAvailable = product.available;
+
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        leading: _ProductThumbnail(imageUrl: product.imageUrl),
+        title: Text(product.name),
+        subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: SizedBox(
-                width: 80,
-                height: 80,
-                child: product.imageUrl.isEmpty
-                    ? Container(
-                        color: Colors.grey.shade300,
-                        child: const Icon(Icons.local_drink_outlined),
-                      )
-                    : CachedNetworkImage(
-                        imageUrl: product.imageUrl,
-                        cacheKey:
-                            'img:search:${product.id}:${product.imageUrl}',
-                        cacheManager: AppImageCacheManagers.productImages,
-                        fit: BoxFit.cover,
-                        memCacheWidth: 240,
-                        memCacheHeight: 240,
-                        placeholder: (_, __) =>
-                            Container(color: Colors.grey.shade200),
-                        errorWidget: (_, __, ___) =>
-                            const Icon(Icons.broken_image),
-                      ),
+            Text(
+              product.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '\$${product.price.toStringAsFixed(2)}',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    product.name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    product.description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: <Widget>[
-                      Text(
-                        '\$${product.price.toStringAsFixed(0)}',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        tooltip: product.available
-                            ? 'Agregar al carrito'
-                            : 'Producto no disponible',
-                        onPressed: product.available ? onAddToCart : null,
-                        icon: const Icon(Icons.add_shopping_cart_outlined),
-                      ),
-                    ],
-                  ),
-                  if (!product.available)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 4),
-                      child: Chip(
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        label: Text('No disponible'),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
-                ],
+            if (!isAvailable)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Chip(
+                  visualDensity: VisualDensity.compact,
+                  label: const Text('Unavailable'),
+                ),
               ),
-            ),
           ],
         ),
+        isThreeLine: true,
+        trailing: IconButton(
+          onPressed: isAvailable ? onAddToCart : null,
+          icon: const Icon(Icons.add_shopping_cart_outlined),
+          tooltip: isAvailable ? 'Add to cart' : 'Product unavailable',
+        ),
+      ),
+    );
+  }
+}
+
+class _ProductThumbnail extends StatelessWidget {
+  const _ProductThumbnail({required this.imageUrl});
+
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl.isEmpty) {
+      return const _FallbackThumbnail();
+    }
+
+    if (imageUrl.startsWith('http')) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          width: 56,
+          height: 56,
+          fit: BoxFit.cover,
+          placeholder: (_, __) => Container(
+            width: 56,
+            height: 56,
+            color: Colors.black12,
+            child: const Center(
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+          errorWidget: (_, __, ___) => const _FallbackThumbnail(),
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.asset(imageUrl, width: 56, height: 56, fit: BoxFit.cover),
+    );
+  }
+}
+
+class _FallbackThumbnail extends StatelessWidget {
+  const _FallbackThumbnail();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceVariant,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(
+        Icons.local_bar_outlined,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
   }
