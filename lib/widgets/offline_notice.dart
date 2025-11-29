@@ -4,7 +4,12 @@ import 'package:flutter/material.dart';
 import '../services/connectivity_service.dart';
 
 class OfflineNotice extends StatefulWidget {
-  const OfflineNotice({super.key});
+  const OfflineNotice({
+    super.key,
+    this.message = 'You are offline. Showing cached content.',
+  });
+
+  final String message;
 
   @override
   State<OfflineNotice> createState() => _OfflineNoticeState();
@@ -46,11 +51,11 @@ class _OfflineNoticeState extends State<OfflineNotice> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.orange),
       ),
-      child: const Row(
+      child: Row(
         children: <Widget>[
-          Icon(Icons.wifi_off, color: Colors.orange),
-          SizedBox(width: 8),
-          Expanded(child: Text('You are offline. Showing cached content.')),
+          const Icon(Icons.wifi_off, color: Colors.orange),
+          const SizedBox(width: 8),
+          Expanded(child: Text(widget.message)),
         ],
       ),
     );

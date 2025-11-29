@@ -5,6 +5,8 @@ import '../services/image_cache_manager.dart';
 import '../services/local_catalog_storage.dart';
 import '../core/strategies/error_handling_strategy.dart';
 import '../domain/entities/product_recommendation.dart';
+import '../domain/entities/product.dart';
+import '../pages/product_page.dart';
 import '../di/injector.dart';
 import '../services/cart_service.dart';
 
@@ -296,126 +298,152 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
   }
 
   Widget _buildProductCard(ProductRecommendation product) {
-    return Container(
-      width: 200,
-      margin: const EdgeInsets.only(right: 12),
-      child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Product Image
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(12),
-              ),
-              child: Container(
-                height: 120,
-                width: double.infinity,
-                color: Colors.grey[200],
-                child: product.imageUrl.isNotEmpty
-                    ? CachedNetworkImage(
-                        imageUrl: product.imageUrl,
-                        cacheKey: 'img:reco:${product.id}:${product.imageUrl}',
-                        cacheManager: AppImageCacheManagers.productImages,
-                        fit: BoxFit.cover,
-                        placeholder: (_, __) => const SizedBox.shrink(),
-                        errorWidget: (_, __, ___) => const Icon(
+    return GestureDetector(
+      onTap: () => _openDetails(product),
+      child: Container(
+        width: 200,
+        margin: const EdgeInsets.only(right: 12),
+        child: Card(
+          elevation: 2,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Product Image
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
+                child: Container(
+                  height: 120,
+                  width: double.infinity,
+                  color: Colors.grey[200],
+                  child: product.imageUrl.isNotEmpty
+                      ? Hero(
+                          tag: 'product-${product.id}',
+                          child: CachedNetworkImage(
+                            imageUrl: product.imageUrl,
+                            cacheKey:
+                                'img:reco:${product.id}:${product.imageUrl}',
+                            cacheManager: AppImageCacheManagers.productImages,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => const SizedBox.shrink(),
+                            errorWidget: (_, __, ___) => const Icon(
+                              Icons.image_not_supported,
+                              size: 48,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        )
+                      : const Icon(
                           Icons.image_not_supported,
                           size: 48,
                           color: Colors.grey,
                         ),
-                      )
-                    : const Icon(
-                        Icons.image_not_supported,
-                        size: 48,
-                        color: Colors.grey,
-                      ),
+                ),
               ),
-            ),
 
-            // Product Info
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Product Type Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
+              // Product Info
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Product Type Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          product.productType.name,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
+
+                      const SizedBox(height: 8),
+
+                      // Product Name
+                      Text(
+                        product.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      child: Text(
-                        product.productType.name,
+
+                      const SizedBox(height: 4),
+
+                      // Price
+                      Text(
+                        '\$${product.price.toStringAsFixed(0)}',
                         style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                           color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
-                    ),
 
-                    const SizedBox(height: 8),
+                      const Spacer(),
 
-                    // Product Name
-                    Text(
-                      product.name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-
-                    const SizedBox(height: 4),
-
-                    // Price
-                    Text(
-                      '\$${product.price.toStringAsFixed(0)}',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-
-                    const Spacer(),
-
-                    // Add to Cart Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: product.available
-                            ? () => _addToCart(product)
-                            : null,
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                      // Add to Cart Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: product.available
+                              ? () => _addToCart(product)
+                              : null,
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: Text(
+                            product.available ? 'Add to Cart' : 'Unavailable',
+                            style: const TextStyle(fontSize: 12),
                           ),
                         ),
-                        child: Text(
-                          product.available ? 'Add to Cart' : 'Unavailable',
-                          style: const TextStyle(fontSize: 12),
-                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  void _openDetails(ProductRecommendation product) {
+    final ProductEntity asEntity = ProductEntity(
+      id: product.id,
+      typeId: product.productType.id,
+      name: product.name,
+      description: product.description ?? '',
+      imageUrl: product.imageUrl,
+      price: product.price,
+      available: product.available,
+    );
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProductPage(product: asEntity),
       ),
     );
   }

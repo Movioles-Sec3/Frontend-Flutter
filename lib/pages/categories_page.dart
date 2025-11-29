@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tapandtoast/pages/product_page.dart';
 
+import '../domain/entities/product.dart';
+
 class CategoriesPage extends StatelessWidget {
   const CategoriesPage({super.key});
 
@@ -35,7 +37,18 @@ class CategoriesPage extends StatelessWidget {
                 if (cat.label == 'Drinks') {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => const ProductPage(),
+                      builder: (_) => ProductPage(
+                        product: ProductEntity(
+                          id: 0,
+                          typeId: 0,
+                          name: 'Mojito clásico',
+                          description:
+                              'Ejemplo de vista de detalle. Selecciona un producto real desde el catálogo para ver sus datos completos.',
+                          imageUrl: 'assets/img/mojito.png',
+                          price: 8,
+                          available: true,
+                        ),
+                      ),
                     ),
                   );
                 }
