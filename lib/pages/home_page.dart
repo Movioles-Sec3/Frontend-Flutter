@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../services/image_cache_manager.dart';
 import '../widgets/offline_notice.dart';
 import 'products_by_category_page.dart';
+import 'search_page.dart';
 import '../widgets/recommendations_widget.dart';
 
 class HomePage extends StatelessWidget {
@@ -95,12 +96,19 @@ class _SearchBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: const TextField(
-        decoration: InputDecoration(
+      child: TextField(
+        readOnly: true,
+        showCursor: false,
+        decoration: const InputDecoration(
           icon: Icon(Icons.search),
-          hintText: 'Search',
+          hintText: 'Search products',
           border: InputBorder.none,
         ),
+        onTap: () {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute<void>(builder: (_) => const SearchPage()));
+        },
       ),
     );
   }
