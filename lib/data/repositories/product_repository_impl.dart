@@ -50,14 +50,19 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
-  Future<Result<List<ProductEntity>>> getByCategory(int categoryId) async {
+  Future<Result<List<ProductEntity>>> getByCategory(
+    int categoryId, {
+    bool forceRefresh = false,
+  }) async {
     final String categoryKey = 'products:category:$categoryId';
 
-    final List<ProductEntity> cachedCategory = await _loadProductsFromCache(
-      cacheKey: categoryKey,
-    );
-    if (cachedCategory.isNotEmpty) {
-      return Result.success(cachedCategory);
+    if (!forceRefresh) {
+      final List<ProductEntity> cachedCategory = await _loadProductsFromCache(
+        cacheKey: categoryKey,
+      );
+      if (cachedCategory.isNotEmpty) {
+        return Result.success(cachedCategory);
+      }
     }
 
     try {
@@ -65,8 +70,26 @@ class ProductRepositoryImpl implements ProductRepository {
         '/productos/',
         auth: true,
       );
-      if (res.isFailure) return Result.failure(res.error!);
-      if (res.data is! List) return Result.failure('Invalid server response');
+      if (res.isFailure) {
+        if (forceRefresh) {
+          final List<ProductEntity> cachedFallback =
+              await _loadProductsFromCache(cacheKey: categoryKey);
+          if (cachedFallback.isNotEmpty) {
+            return Result.success(cachedFallback);
+          }
+        }
+        return Result.failure(res.error!);
+      }
+      if (res.data is! List) {
+        if (forceRefresh) {
+          final List<ProductEntity> cachedFallback =
+              await _loadProductsFromCache(cacheKey: categoryKey);
+          if (cachedFallback.isNotEmpty) {
+            return Result.success(cachedFallback);
+          }
+        }
+        return Result.failure('Invalid server response');
+      }
 
       final List<dynamic> rawList = res.data as List<dynamic>;
       final List<Map<String, dynamic>> jsonList = rawList
@@ -91,6 +114,15 @@ class ProductRepositoryImpl implements ProductRepository {
 
       return Result.success(filtered);
     } catch (e) {
+      if (!forceRefresh) {
+        return Result.failure('Unable to filter products: $e');
+      }
+      final List<ProductEntity> fallback = await _loadProductsFromCache(
+        cacheKey: categoryKey,
+      );
+      if (fallback.isNotEmpty) {
+        return Result.success(fallback);
+      }
       return Result.failure('Unable to filter products: $e');
     }
   }
