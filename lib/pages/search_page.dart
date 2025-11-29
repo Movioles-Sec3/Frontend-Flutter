@@ -13,6 +13,7 @@ import '../services/search_favorites_db.dart';
 import '../services/search_history_service.dart';
 import '../services/local_catalog_storage.dart';
 import '../widgets/offline_notice.dart';
+import 'product_page.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -380,6 +381,13 @@ class _SearchPageState extends State<SearchPage> {
           onAddToCart: () => _addToCart(product),
           isFavorite: _favoriteIds.contains(product.id),
           onToggleFavorite: () => _toggleFavorite(product),
+          onViewDetail: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ProductPage(product: product),
+              ),
+            );
+          },
         );
       },
     );
@@ -537,6 +545,14 @@ class _SearchPageState extends State<SearchPage> {
                                   if (!context.mounted) return;
                                   setModalState(() {});
                                 },
+                                onViewDetail: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) =>
+                                          ProductPage(product: product),
+                                    ),
+                                  );
+                                },
                               );
                             },
                           ),
@@ -604,12 +620,14 @@ class _ProductResultTile extends StatelessWidget {
     required this.onAddToCart,
     required this.isFavorite,
     required this.onToggleFavorite,
+    required this.onViewDetail,
   });
 
   final ProductEntity product;
   final VoidCallback onAddToCart;
   final bool isFavorite;
   final VoidCallback onToggleFavorite;
+  final VoidCallback onViewDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -619,6 +637,7 @@ class _ProductResultTile extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: ListTile(
+        onTap: onViewDetail,
         leading: _ProductThumbnail(imageUrl: product.imageUrl),
         title: Text(product.name),
         subtitle: Column(

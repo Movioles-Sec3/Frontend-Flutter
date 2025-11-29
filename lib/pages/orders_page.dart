@@ -71,16 +71,18 @@ class _OrdersPageState extends State<OrdersPage> {
             : <dynamic>[];
         final List<OrderEntity> parsed = arr
             .cast<Map<String, dynamic>>()
-            .map((m) => OrderEntity(
-                  id: (m['id'] as num?)?.toInt() ?? 0,
-                  total: ((m['total'] ?? 0) as num).toDouble(),
-                  status: (m['estado'] ?? '').toString(),
-                  placedAt: (m['fecha_hora'] ?? '').toString(),
-                  readyAt: (m['fecha_listo'] ?? '').toString(),
-                  deliveredAt: (m['fecha_entregado'] ?? '').toString(),
-                  qr: (m['qr']),
-                  raw: m,
-                ))
+            .map(
+              (m) => OrderEntity(
+                id: (m['id'] as num?)?.toInt() ?? 0,
+                total: ((m['total'] ?? 0) as num).toDouble(),
+                status: (m['estado'] ?? '').toString(),
+                placedAt: (m['fecha_hora'] ?? '').toString(),
+                readyAt: (m['fecha_listo'] ?? '').toString(),
+                deliveredAt: (m['fecha_entregado'] ?? '').toString(),
+                qr: (m['qr']),
+                raw: m,
+              ),
+            )
             .toList(growable: false);
         if (parsed.isNotEmpty) {
           setState(() {
@@ -95,52 +97,130 @@ class _OrdersPageState extends State<OrdersPage> {
     // Future with then/catchError handlers
     return useCase()
         .then((Result<List<OrderEntity>> result) {
-      if (!mounted) return;
-      if (result.isSuccess) {
-        setState(() {
-          _orders = result.data!;
-          _loading = false;
-        });
-        // Save to cache (orders:list) using LRU strategy (orders: prefix)
-        try {
-          final List<Map<String, dynamic>> raw = _orders
-              .map((o) => o.raw ?? <String, dynamic>{
-                    'id': o.id,
-                    'total': o.total,
-                    'estado': o.status,
-                    'fecha_hora': o.placedAt,
-                    'fecha_listo': o.readyAt ?? '',
-                    'fecha_entregado': o.deliveredAt ?? '',
-                    if (o.qr != null) 'qr': o.qr,
-                  })
-              .toList(growable: false);
-          final CacheContext<String> cache = StrategyFactory.createCacheContext();
-          // ignore: discarded_futures
-          cache.store('orders:list', jsonEncode(raw), expiration: const Duration(minutes: 10));
-        } catch (_) {}
-        // Save to relational DB
-        unawaited(_persistOrdersToDb(_orders));
-        // persist orders locally for offline access
-        final List<Map<String, dynamic>> raw = _orders
-            .map((o) => o.raw ?? <String, dynamic>{
-                  'id': o.id,
-                  'total': o.total,
-                  'estado': o.status,
-                  'fecha_hora': o.placedAt,
-                  'fecha_listo': o.readyAt ?? '',
-                  'fecha_entregado': o.deliveredAt ?? '',
-                  if (o.qr != null) 'qr': o.qr,
-                })
-            .toList(growable: false);
-        LocalOrdersStorage.instance.saveOrders(raw);
-      } else {
-        // Try offline fallback from DB first, then shared cache
-        OrdersDb.instance.getOrders().then((rows) async {
           if (!mounted) return;
-          if (rows.isNotEmpty) {
+          if (result.isSuccess) {
             setState(() {
-              _orders = rows
-                  .map((m) => OrderEntity(
+              _orders = result.data!;
+              _loading = false;
+            });
+            // Save to cache (orders:list) using LRU strategy (orders: prefix)
+            try {
+              final List<Map<String, dynamic>> raw = _orders
+                  .map(
+                    (o) =>
+                        o.raw ??
+                        <String, dynamic>{
+                          'id': o.id,
+                          'total': o.total,
+                          'estado': o.status,
+                          'fecha_hora': o.placedAt,
+                          'fecha_listo': o.readyAt ?? '',
+                          'fecha_entregado': o.deliveredAt ?? '',
+                          if (o.qr != null) 'qr': o.qr,
+                        },
+                  )
+                  .toList(growable: false);
+              final CacheContext<String> cache =
+                  StrategyFactory.createCacheContext();
+              // ignore: discarded_futures
+              cache.store(
+                'orders:list',
+                jsonEncode(raw),
+                expiration: const Duration(minutes: 10),
+              );
+            } catch (_) {}
+            // Save to relational DB
+            unawaited(_persistOrdersToDb(_orders));
+            // persist orders locally for offline access
+            final List<Map<String, dynamic>> raw = _orders
+                .map(
+                  (o) =>
+                      o.raw ??
+                      <String, dynamic>{
+                        'id': o.id,
+                        'total': o.total,
+                        'estado': o.status,
+                        'fecha_hora': o.placedAt,
+                        'fecha_listo': o.readyAt ?? '',
+                        'fecha_entregado': o.deliveredAt ?? '',
+                        if (o.qr != null) 'qr': o.qr,
+                      },
+                )
+                .toList(growable: false);
+            LocalOrdersStorage.instance.saveOrders(raw);
+          } else {
+            // Try offline fallback from DB first, then shared cache
+            OrdersDb.instance.getOrders().then((rows) async {
+              if (!mounted) return;
+              if (rows.isNotEmpty) {
+                setState(() {
+                  _orders = rows
+                      .map(
+                        (m) => OrderEntity(
+                          id: (m['id'] as num?)?.toInt() ?? 0,
+                          total: ((m['total'] ?? 0) as num).toDouble(),
+                          status: (m['status'] ?? '').toString(),
+                          placedAt: (m['placed_at'] ?? '').toString(),
+                          readyAt: (m['ready_at'] ?? '').toString(),
+                          deliveredAt: (m['delivered_at'] ?? '').toString(),
+                          qr: null,
+                          raw: <String, dynamic>{
+                            'id': m['id'],
+                            'total': m['total'],
+                            'estado': m['status'],
+                            'fecha_hora': m['placed_at'],
+                            'fecha_listo': m['ready_at'],
+                            'fecha_entregado': m['delivered_at'],
+                          },
+                        ),
+                      )
+                      .toList();
+                  _loading = false;
+                  _error = null;
+                });
+                return;
+              }
+              // fallback to cached list
+              final list = await LocalOrdersStorage.instance.readOrders();
+              if (!mounted) return;
+              if (list.isNotEmpty) {
+                setState(() {
+                  _orders = list
+                      .map(
+                        (m) => OrderEntity(
+                          id: (m['id'] as num?)?.toInt() ?? 0,
+                          total: ((m['total'] ?? 0) as num).toDouble(),
+                          status: (m['estado'] ?? '').toString(),
+                          placedAt: (m['fecha_hora'] ?? '').toString(),
+                          readyAt: (m['fecha_listo'] ?? '').toString(),
+                          deliveredAt: (m['fecha_entregado'] ?? '').toString(),
+                          qr: (m['qr']),
+                          raw: m,
+                        ),
+                      )
+                      .toList();
+                  _loading = false;
+                  _error = null;
+                });
+              } else {
+                setState(() {
+                  _error = _formatError(result.error);
+                  _loading = false;
+                });
+              }
+            });
+          }
+        })
+        .catchError((Object e) {
+          if (!mounted) return;
+          // Try offline fallback: DB first, then shared cache
+          OrdersDb.instance.getOrders().then((rows) async {
+            if (!mounted) return;
+            if (rows.isNotEmpty) {
+              setState(() {
+                _orders = rows
+                    .map(
+                      (m) => OrderEntity(
                         id: (m['id'] as num?)?.toInt() ?? 0,
                         total: ((m['total'] ?? 0) as num).toDouble(),
                         status: (m['status'] ?? '').toString(),
@@ -156,102 +236,47 @@ class _OrdersPageState extends State<OrdersPage> {
                           'fecha_listo': m['ready_at'],
                           'fecha_entregado': m['delivered_at'],
                         },
-                      ))
-                  .toList();
-              _loading = false;
-              _error = null;
-            });
-            return;
-          }
-          // fallback to cached list
-          final list = await LocalOrdersStorage.instance.readOrders();
-          if (!mounted) return;
-          if (list.isNotEmpty) {
-            setState(() {
-              _orders = list
-                  .map((m) => OrderEntity(
-                        id: (m['id'] as num?)?.toInt() ?? 0,
-                        total: ((m['total'] ?? 0) as num).toDouble(),
-                        status: (m['estado'] ?? '').toString(),
-                        placedAt: (m['fecha_hora'] ?? '').toString(),
-                        readyAt: (m['fecha_listo'] ?? '').toString(),
-                        deliveredAt: (m['fecha_entregado'] ?? '').toString(),
-                        qr: (m['qr']),
-                        raw: m,
-                      ))
-                  .toList();
-              _loading = false;
-              _error = null;
-            });
-          } else {
-            setState(() {
-              _error = result.error;
-              _loading = false;
-            });
-          }
-        });
-      }
-    }).catchError((Object e) {
-      if (!mounted) return;
-      // Try offline fallback: DB first, then shared cache
-      OrdersDb.instance.getOrders().then((rows) async {
-        if (!mounted) return;
-        if (rows.isNotEmpty) {
-          setState(() {
-            _orders = rows
-                .map((m) => OrderEntity(
-                      id: (m['id'] as num?)?.toInt() ?? 0,
-                      total: ((m['total'] ?? 0) as num).toDouble(),
-                      status: (m['status'] ?? '').toString(),
-                      placedAt: (m['placed_at'] ?? '').toString(),
-                      readyAt: (m['ready_at'] ?? '').toString(),
-                      deliveredAt: (m['delivered_at'] ?? '').toString(),
-                      qr: null,
-                      raw: <String, dynamic>{
-                        'id': m['id'],
-                        'total': m['total'],
-                        'estado': m['status'],
-                        'fecha_hora': m['placed_at'],
-                        'fecha_listo': m['ready_at'],
-                        'fecha_entregado': m['delivered_at'],
-                      },
-                    ))
-                .toList();
-            _loading = false;
-            _error = null;
+                      ),
+                    )
+                    .toList();
+                _loading = false;
+                _error = null;
+              });
+            } else {
+              final list = await LocalOrdersStorage.instance.readOrders();
+              if (list.isNotEmpty) {
+                setState(() {
+                  _orders = list
+                      .map(
+                        (m) => OrderEntity(
+                          id: (m['id'] as num?)?.toInt() ?? 0,
+                          total: ((m['total'] ?? 0) as num).toDouble(),
+                          status: (m['estado'] ?? '').toString(),
+                          placedAt: (m['fecha_hora'] ?? '').toString(),
+                          readyAt: (m['fecha_listo'] ?? '').toString(),
+                          deliveredAt: (m['fecha_entregado'] ?? '').toString(),
+                          qr: (m['qr']),
+                          raw: m,
+                        ),
+                      )
+                      .toList();
+                  _loading = false;
+                  _error = null;
+                });
+              } else {
+                setState(() {
+                  _error = _formatError(e.toString());
+                  _loading = false;
+                });
+              }
+            }
           });
-        } else {
-          final list = await LocalOrdersStorage.instance.readOrders();
-          if (list.isNotEmpty) {
-            setState(() {
-              _orders = list
-                  .map((m) => OrderEntity(
-                        id: (m['id'] as num?)?.toInt() ?? 0,
-                        total: ((m['total'] ?? 0) as num).toDouble(),
-                        status: (m['estado'] ?? '').toString(),
-                        placedAt: (m['fecha_hora'] ?? '').toString(),
-                        readyAt: (m['fecha_listo'] ?? '').toString(),
-                        deliveredAt: (m['fecha_entregado'] ?? '').toString(),
-                        qr: (m['qr']),
-                        raw: m,
-                      ))
-                  .toList();
-              _loading = false;
-              _error = null;
-            });
-          } else {
-            setState(() {
-              _error = e.toString();
-              _loading = false;
-            });
-          }
-        }
-      });
-    });
+        });
   }
 
   Future<void> _refreshPendingCount() async {
-    final List<Map<String, dynamic>> q = await LocalOrdersStorage.instance.readPendingOrders();
+    final List<Map<String, dynamic>> q = await LocalOrdersStorage.instance
+        .readPendingOrders();
     if (!mounted) return;
     setState(() {
       _pending = q.length;
@@ -268,7 +293,10 @@ class _OrdersPageState extends State<OrdersPage> {
         placedAt: o.placedAt,
         readyAt: o.readyAt,
         deliveredAt: o.deliveredAt,
-        items: const <Map<String, dynamic>>[], // items are not returned here; left empty
+        items:
+            const <
+              Map<String, dynamic>
+            >[], // items are not returned here; left empty
       );
     }
   }
@@ -298,15 +326,32 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
+  String _formatError(String? raw) {
+    final String normalized = (raw ?? '').toLowerCase();
+    if (normalized.contains('socket') ||
+        normalized.contains('network') ||
+        normalized.contains('failed host lookup') ||
+        normalized.contains('connection refused') ||
+        normalized.contains('timeout') ||
+        normalized.contains('internet')) {
+      return 'We could not update your orders because you are offline. Please check your internet connection and try again.';
+    }
+    if ((raw ?? '').trim().isEmpty) {
+      return 'We could not load your orders. Please try again in a few seconds.';
+    }
+    return raw!;
+  }
+
   Future<void> _reorder(int orderId) async {
     try {
-      final GetOrderDetailsUseCase useCase = GetIt.I.get<GetOrderDetailsUseCase>();
+      final GetOrderDetailsUseCase useCase = GetIt.I
+          .get<GetOrderDetailsUseCase>();
       final Result<List<Map<String, dynamic>>> result = await useCase(orderId);
 
       if (result.isSuccess && result.data != null) {
         final CartService cartService = CartService.instance;
         cartService.reorderFromOrder(result.data!);
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -431,28 +476,29 @@ class _OrdersPageState extends State<OrdersPage> {
                         );
                       }
                     },
-                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                      const PopupMenuItem<String>(
-                        value: 'view',
-                        child: Row(
-                          children: <Widget>[
-                            Icon(Icons.visibility),
-                            SizedBox(width: 8),
-                            Text('View Details'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem<String>(
-                        value: 'reorder',
-                        child: Row(
-                          children: <Widget>[
-                            Icon(Icons.shopping_cart),
-                            SizedBox(width: 8),
-                            Text('Reorder'),
-                          ],
-                        ),
-                      ),
-                    ],
+                    itemBuilder: (BuildContext context) =>
+                        <PopupMenuEntry<String>>[
+                          const PopupMenuItem<String>(
+                            value: 'view',
+                            child: Row(
+                              children: <Widget>[
+                                Icon(Icons.visibility),
+                                SizedBox(width: 8),
+                                Text('View Details'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem<String>(
+                            value: 'reorder',
+                            child: Row(
+                              children: <Widget>[
+                                Icon(Icons.shopping_cart),
+                                SizedBox(width: 8),
+                                Text('Reorder'),
+                              ],
+                            ),
+                          ),
+                        ],
                     child: const Icon(Icons.more_vert),
                   ),
                 ],
@@ -517,7 +563,9 @@ class _OrdersPageState extends State<OrdersPage> {
         children: <Widget>[
           const Icon(Icons.cloud_upload, color: Colors.blueAccent),
           const SizedBox(width: 8),
-          Expanded(child: Text('$_pending order(s) will be placed when back online.')),
+          Expanded(
+            child: Text('$_pending order(s) will be placed when back online.'),
+          ),
         ],
       ),
     );
