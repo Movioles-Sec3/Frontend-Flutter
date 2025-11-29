@@ -52,29 +52,16 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
         page: 1,
       );
       if (cached.isNotEmpty && mounted) {
-        setState(() {
-          _products = cached
-              .map(
-                (m) => ProductEntity(
-                  id: (m['id'] as num?)?.toInt() ?? 0,
-                  typeId:
-                      (m['typeId'] as num?)?.toInt() ??
-                      (m['id_tipo'] as num?)?.toInt() ??
-                      0,
-                  name: (m['name'] ?? m['nombre'] ?? '').toString(),
-                  description: (m['description'] ?? m['descripcion'] ?? '')
-                      .toString(),
-                  imageUrl:
-                      (m['imageUrl'] ?? m['imagen_url'] ?? m['imagen'] ?? '')
-                          .toString(),
-                  price: ((m['price'] ?? m['precio'] ?? 0) as num).toDouble(),
-                  available:
-                      (m['available'] ?? m['disponible'] ?? true) as bool,
-                ),
-              )
-              .toList(growable: false);
-          _loading = false;
-        });
+        final List<ProductEntity> mapped = cached
+            .map((m) => ProductEntity.fromJson(Map<String, dynamic>.from(m)))
+            .where((p) => p.typeId == widget.categoryId)
+            .toList(growable: false);
+        if (mapped.isNotEmpty) {
+          setState(() {
+            _products = mapped;
+            _loading = false;
+          });
+        }
       }
     } catch (_) {}
 
@@ -88,13 +75,19 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
       if (!mounted) return;
 
       if (result.isSuccess) {
-        final items = result.data!;
+        final List<ProductEntity> items = result.data!
+            .where((p) => p.typeId == widget.categoryId)
+            .toList(growable: false);
+
         setState(() {
           _products = items;
           _loading = false;
         });
         // Persist to local cache for quick reopen
-        final raw = items
+        final List<ProductEntity> cacheSubset = items
+            .take(_cacheLimitPerCategory)
+            .toList(growable: false);
+        final raw = cacheSubset
             .map(
               (p) => <String, dynamic>{
                 'id': p.id,
@@ -141,6 +134,8 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
       });
     }
   }
+
+  static const int _cacheLimitPerCategory = 20;
 
   @override
   Widget build(BuildContext context) {

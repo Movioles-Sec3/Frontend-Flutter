@@ -35,12 +35,12 @@ class _ProductPageState extends State<ProductPage> {
   }
 
   Future<PreparedProductData> _loadPrepared(ProductEntity product) async {
-    final PreparedProductData? cached =
-        ProductDetailCache.instance.get(product.id);
+    final PreparedProductData? cached = ProductDetailCache.instance.get(
+      product.id,
+    );
     if (cached != null) return cached;
 
-    final PreparedProductData? fromDisk =
-        await _productLocalStorage.getProduct(
+    final PreparedProductData? fromDisk = await _productLocalStorage.getProduct(
       product.id,
       maxAge: const Duration(hours: 12),
     );
@@ -51,9 +51,9 @@ class _ProductPageState extends State<ProductPage> {
 
     final PreparedProductData data =
         await compute<ProductInput, PreparedProductData>(
-      prepareProductData,
-      ProductInput.fromEntity(product),
-    );
+          prepareProductData,
+          ProductInput.fromEntity(product),
+        );
     ProductDetailCache.instance.put(data);
     await _productLocalStorage.saveProduct(data);
     return data;
@@ -61,8 +61,7 @@ class _ProductPageState extends State<ProductPage> {
 
   void _increment() => setState(() => _quantity = (_quantity + 1).clamp(1, 20));
 
-  void _decrement() =>
-      setState(() => _quantity = (_quantity - 1).clamp(1, 20));
+  void _decrement() => setState(() => _quantity = (_quantity - 1).clamp(1, 20));
 
   void _addToCart() {
     final product = widget.product;
@@ -143,6 +142,7 @@ class _ProductPageState extends State<ProductPage> {
 
         final PreparedProductData data =
             snap.data ?? PreparedProductData.fromEntity(widget.product);
+
         _prefetchImage(context, data);
 
         return Scaffold(
@@ -210,7 +210,7 @@ class _ProductPageState extends State<ProductPage> {
                     message: 'No internet connection. Showing available data.',
                   ),
                 ),
-                _ProductHeader(product: widget.product, heroTag: data.heroTag),
+                _ProductHeader(data: data),
                 const SizedBox(height: 18),
                 Row(
                   children: [
@@ -223,7 +223,9 @@ class _ProductPageState extends State<ProductPage> {
                     ),
                     const SizedBox(width: 10),
                     Chip(
-                      label: Text(data.available ? 'Disponible' : 'No disponible'),
+                      label: Text(
+                        data.available ? 'Disponible' : 'No disponible',
+                      ),
                       backgroundColor: data.available
                           ? colors.primary.withOpacity(0.12)
                           : colors.error.withOpacity(0.12),
@@ -270,7 +272,7 @@ class _ProductPageState extends State<ProductPage> {
     if (data.imageUrl.isEmpty || !data.imageUrl.startsWith('http')) return;
     final ImageProvider provider = CachedNetworkImageProvider(
       data.imageUrl,
-      cacheKey: 'img:product:${data.id}:${data.imageUrl}',
+      cacheKey: 'img:product:${data.imageUrl}',
       cacheManager: AppImageCacheManagers.productImages,
     );
     // ignore: discarded_futures
@@ -279,13 +281,13 @@ class _ProductPageState extends State<ProductPage> {
 }
 
 class _ProductHeader extends StatelessWidget {
-  const _ProductHeader({required this.product, required this.heroTag});
-  final ProductEntity product;
-  final String heroTag;
+  const _ProductHeader({required this.data});
+
+  final PreparedProductData data;
 
   @override
   Widget build(BuildContext context) {
-    final String imageUrl = product.imageUrl;
+    final String imageUrl = data.imageUrl;
     final BorderRadius radius = BorderRadius.circular(18);
     final ColorScheme colors = Theme.of(context).colorScheme;
 
@@ -304,16 +306,13 @@ class _ProductHeader extends StatelessWidget {
     } else if (imageUrl.startsWith('http')) {
       image = CachedNetworkImage(
         imageUrl: imageUrl,
-        cacheKey: 'img:product:${product.id}:$imageUrl',
+        cacheKey: 'img:product:$imageUrl',
         cacheManager: AppImageCacheManagers.productImages,
         imageBuilder: (_, ImageProvider provider) => Container(
           height: 260,
           decoration: BoxDecoration(
             borderRadius: radius,
-            image: DecorationImage(
-              image: provider,
-              fit: BoxFit.cover,
-            ),
+            image: DecorationImage(image: provider, fit: BoxFit.cover),
           ),
         ),
         placeholder: (_, __) => Container(
@@ -348,10 +347,7 @@ class _ProductHeader extends StatelessWidget {
 
     return Stack(
       children: [
-        Hero(
-          tag: heroTag,
-          child: image,
-        ),
+        Hero(tag: data.heroTag, child: image),
         Positioned(
           top: 12,
           right: 12,
@@ -364,7 +360,11 @@ class _ProductHeader extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Icon(Icons.local_offer_outlined, size: 16, color: colors.primary),
+                Icon(
+                  Icons.local_offer_outlined,
+                  size: 16,
+                  color: colors.primary,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   'Tap & Toast',
@@ -411,10 +411,9 @@ class _QtyControl extends StatelessWidget {
           ),
           Text(
             quantity.toString(),
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           IconButton(
             onPressed: onAdd,
@@ -482,9 +481,7 @@ class _InfoRow extends StatelessWidget {
           const Spacer(),
           Text(
             value,
-            style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
         ],
       ),

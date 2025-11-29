@@ -17,6 +17,7 @@ import '../services/local_orders_storage.dart';
 import '../services/orders_db.dart';
 import '../services/orders_sync_service.dart';
 import '../services/connectivity_service.dart';
+import '../services/image_cache_manager.dart';
 
 class CartItem {
   final int productId;
@@ -126,7 +127,6 @@ class OrderSummaryPage extends StatelessWidget {
                   FilledButton(
                     onPressed: () async {
                       final contextToUse = context;
-                      final CartItemData reference = data.first;
                       final double subtotal = data.fold<double>(
                         0,
                         (s, e) => s + e.lineTotal,
@@ -377,9 +377,24 @@ class _EditableProductTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Widget image = item.imageUrl.startsWith('http')
-        ? Image.network(item.imageUrl, fit: BoxFit.cover)
-        : Image.asset(item.imageUrl, fit: BoxFit.cover);
+    final bool hasImage = item.imageUrl.isNotEmpty;
+    final Widget image = hasImage && item.imageUrl.startsWith('http')
+        ? CachedNetworkImage(
+            imageUrl: item.imageUrl,
+            cacheKey: 'img:product:${item.imageUrl}',
+            cacheManager: AppImageCacheManagers.productImages,
+            fit: BoxFit.cover,
+            memCacheWidth: 256,
+            memCacheHeight: 256,
+            placeholder: (_, __) => Container(color: Colors.black12),
+            errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
+          )
+        : hasImage
+        ? Image.asset(item.imageUrl, fit: BoxFit.cover)
+        : Container(
+            color: Colors.black12,
+            child: const Icon(Icons.image_outlined),
+          );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),

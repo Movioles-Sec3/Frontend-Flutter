@@ -60,6 +60,7 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
               categoryId: widget.categoryId!,
             );
       if (cached.isNotEmpty && mounted) {
+        await LocalCatalogStorage.instance.mergeProducts(cached);
         final list = cached
             .map((m) {
               final ProductType pt = ProductType.fromJson(
@@ -124,6 +125,7 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
                 },
               )
               .toList(growable: false);
+          await LocalCatalogStorage.instance.mergeProducts(raw);
           if (widget.categoryId == null) {
             // ignore: discarded_futures
             LocalCatalogStorage.instance.saveHomeRecommended(raw);
@@ -305,8 +307,9 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
         margin: const EdgeInsets.only(right: 12),
         child: Card(
           elevation: 2,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -324,8 +327,7 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
                           tag: 'product-${product.id}',
                           child: CachedNetworkImage(
                             imageUrl: product.imageUrl,
-                            cacheKey:
-                                'img:reco:${product.id}:${product.imageUrl}',
+                            cacheKey: 'img:product:${product.imageUrl}',
                             cacheManager: AppImageCacheManagers.productImages,
                             fit: BoxFit.cover,
                             placeholder: (_, __) => const SizedBox.shrink(),
@@ -435,16 +437,14 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
       id: product.id,
       typeId: product.productType.id,
       name: product.name,
-      description: product.description ?? '',
+      description: product.description,
       imageUrl: product.imageUrl,
       price: product.price,
       available: product.available,
     );
 
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ProductPage(product: asEntity),
-      ),
+      MaterialPageRoute<void>(builder: (_) => ProductPage(product: asEntity)),
     );
   }
 }
