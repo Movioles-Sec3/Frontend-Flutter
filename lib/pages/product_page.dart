@@ -9,6 +9,7 @@ import '../services/cart_service.dart';
 import '../services/image_cache_manager.dart';
 import '../services/product_detail_cache.dart';
 import '../services/product_local_storage.dart';
+import '../services/orders_db.dart';
 import '../widgets/offline_notice.dart';
 
 class ProductPage extends StatefulWidget {
@@ -23,15 +24,26 @@ class ProductPage extends StatefulWidget {
 class _ProductPageState extends State<ProductPage> {
   int _quantity = 1;
   late final Future<PreparedProductData> _preparedFuture;
+  late final Future<int> _orderCountFuture;
   bool _prefetchedImage = false;
   late final ProductLocalStorage _productLocalStorage;
+  late final TextEditingController _noteController;
+  bool _noteInitialized = false;
 
   @override
   void initState() {
     super.initState();
     _productLocalStorage = GetIt.I<ProductLocalStorage>();
+    _noteController = TextEditingController();
+    _orderCountFuture = _loadOrderedCount(widget.product.id);
     // Offload light formatting/normalization to an isolate and cache the result.
     _preparedFuture = _loadPrepared(widget.product);
+  }
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
   }
 
   Future<PreparedProductData> _loadPrepared(ProductEntity product) async {
@@ -57,6 +69,16 @@ class _ProductPageState extends State<ProductPage> {
     ProductDetailCache.instance.put(data);
     await _productLocalStorage.saveProduct(data);
     return data;
+  }
+
+  Future<int> _loadOrderedCount(int productId) async {
+    try {
+      final List<Map<String, dynamic>> items =
+          await OrdersDb.instance.getOrderItemsByProduct(productId);
+      return compute(_sumQuantities, items);
+    } catch (_) {
+      return 0;
+    }
   }
 
   void _increment() => setState(() => _quantity = (_quantity + 1).clamp(1, 20));
@@ -142,6 +164,11 @@ class _ProductPageState extends State<ProductPage> {
 
         final PreparedProductData data =
             snap.data ?? PreparedProductData.fromEntity(widget.product);
+
+        if (!_noteInitialized) {
+          _noteController.text = data.note;
+          _noteInitialized = true;
+        }
 
         _prefetchImage(context, data);
 
@@ -250,6 +277,60 @@ class _ProductPageState extends State<ProductPage> {
                   data.description,
                   style: textTheme.bodyMedium?.copyWith(height: 1.45),
                 ),
+                const SizedBox(height: 12),
+                FutureBuilder<int>(
+                  future: _orderCountFuture,
+                  builder: (BuildContext context, AsyncSnapshot<int> snap) {
+                    final bool loading = snap.connectionState != ConnectionState.done;
+                    final int timesOrdered = snap.data ?? 0;
+                    return Row(
+                      children: [
+                        const Icon(Icons.history, size: 18),
+                        const SizedBox(width: 6),
+                        Text(
+                          loading
+                              ? 'Consultando pedidos...'
+                              : 'Veces pedido: $timesOrdered',
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: colors.onSurface.withOpacity(0.75),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Observaciones',
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _noteController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'Notas para tu pedido (opcional)',
+                    filled: true,
+                    fillColor: colors.surfaceVariant.withOpacity(0.4),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: colors.outline),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: colors.outline.withOpacity(0.6),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: colors.primary),
+                    ),
+                  ),
+                  onChanged: (String value) => _persistNote(data, value),
+                ),
                 const SizedBox(height: 24),
                 _InfoCard(
                   title: 'Detalles del producto',
@@ -266,6 +347,16 @@ class _ProductPageState extends State<ProductPage> {
     );
   }
 
+  Future<void> _persistNote(
+    PreparedProductData data,
+    String rawNote,
+  ) async {
+    final String note = rawNote.trim();
+    final PreparedProductData updated = data.copyWith(note: note);
+    ProductDetailCache.instance.put(updated);
+    await _productLocalStorage.saveProduct(updated);
+  }
+
   void _prefetchImage(BuildContext context, PreparedProductData data) {
     if (_prefetchedImage) return;
     _prefetchedImage = true;
@@ -278,6 +369,15 @@ class _ProductPageState extends State<ProductPage> {
     // ignore: discarded_futures
     precacheImage(provider, context);
   }
+}
+
+int _sumQuantities(List<Map<String, dynamic>> rows) {
+  int total = 0;
+  for (final Map<String, dynamic> row in rows) {
+    final int qty = (row['quantity'] as num?)?.toInt() ?? 0;
+    total += qty;
+  }
+  return total;
 }
 
 class _ProductHeader extends StatelessWidget {
