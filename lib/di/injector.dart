@@ -26,6 +26,7 @@ import '../domain/usecases/get_recommended_products_usecase.dart';
 import '../domain/usecases/login_usecase.dart';
 import '../domain/usecases/recharge_usecase.dart';
 import '../domain/usecases/register_usecase.dart';
+import '../domain/usecases/search_products_usecase.dart';
 import '../domain/usecases/submit_seat_delivery_survey_usecase.dart';
 import '../services/form_cache_service.dart';
 import '../services/profile_local_storage.dart';
@@ -75,6 +76,9 @@ Future<void> setupDependencies() async {
   injector.registerFactory<GetProductsByCategoryUseCase>(
     () => GetProductsByCategoryUseCase(injector.get<ProductRepository>()),
   );
+  injector.registerFactory<SearchProductsUseCase>(
+    () => SearchProductsUseCase(injector.get<ProductRepository>()),
+  );
   injector.registerFactory<GetMyOrdersUseCase>(
     () => GetMyOrdersUseCase(injector.get<OrderRepository>()),
   );
@@ -91,10 +95,13 @@ Future<void> setupDependencies() async {
     () => RechargeUseCase(injector.get<UserRepository>()),
   );
   injector.registerFactory<GetRecommendedProductsUseCase>(
-    () => GetRecommendedProductsUseCase(injector.get<RecommendationRepository>()),
+    () =>
+        GetRecommendedProductsUseCase(injector.get<RecommendationRepository>()),
   );
   injector.registerFactory<GetProductPriceConversionUseCase>(
-    () => GetProductPriceConversionUseCase(injector.get<PriceConversionRepository>()),
+    () => GetProductPriceConversionUseCase(
+      injector.get<PriceConversionRepository>(),
+    ),
   );
   injector.registerFactory<SubmitSeatDeliverySurveyUseCase>(
     () => SubmitSeatDeliverySurveyUseCase(injector.get<UserRepository>()),
@@ -107,11 +114,17 @@ Future<void> setupDependencies() async {
   );
   injector.registerLazySingleton(() => StrategyFactory.createCacheContext());
   injector.registerLazySingleton(() => StrategyFactory.createUIContext());
-  injector.registerLazySingleton(() => StrategyFactory.createErrorHandlingContext());
-  injector.registerLazySingleton(() => StrategyFactory.createRecommendationContext(
-    injector.get<GetRecommendedProductsUseCase>(),
-  ));
-  injector.registerLazySingleton(() => StrategyFactory.createCurrencyDisplayContext());
+  injector.registerLazySingleton(
+    () => StrategyFactory.createErrorHandlingContext(),
+  );
+  injector.registerLazySingleton(
+    () => StrategyFactory.createRecommendationContext(
+      injector.get<GetRecommendedProductsUseCase>(),
+    ),
+  );
+  injector.registerLazySingleton(
+    () => StrategyFactory.createCurrencyDisplayContext(),
+  );
 
   // Services
   // Use SharedPreferences-backed cache for auth form drafts so they persist across sessions

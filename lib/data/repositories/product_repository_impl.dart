@@ -50,6 +50,51 @@ class ProductRepositoryImpl implements ProductRepository {
       return Result.failure('Unable to filter products: $e');
     }
   }
+
+  @override
+  Future<Result<List<ProductEntity>>> searchByName(
+    String name, {
+    bool? available,
+    bool includeAvailabilityFilter = true,
+    int? limit,
+  }) async {
+    if (name.trim().isEmpty) {
+      return Result.failure('Search term cannot be empty');
+    }
+
+    final StringBuffer path = StringBuffer('/productos/buscar?nombre=');
+    path.write(Uri.encodeQueryComponent(name.trim()));
+
+    if (includeAvailabilityFilter && available != null) {
+      path
+        ..write('&disponible=')
+        ..write(available ? 'true' : 'false');
+    }
+
+    if (limit != null) {
+      final int resolvedLimit = limit.clamp(1, 100).toInt();
+      path
+        ..write('&limit=')
+        ..write(resolvedLimit);
+    }
+
+    final Result<dynamic> res = await _apiClient.get(
+      path.toString(),
+      auth: false,
+    );
+
+    if (res.isFailure) return Result.failure(res.error!);
+
+    if (res.data is List) {
+      final List<ProductEntity> items = (res.data as List)
+          .whereType<Map<String, dynamic>>()
+          .map(ProductEntity.fromJson)
+          .toList(growable: false);
+      return Result.success(items);
+    }
+
+    return Result.failure('Invalid server response');
+  }
 }
 
 /// Top-level function for compute to run in an isolate

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_tapandtoast/pages/login_page.dart';
 import 'package:flutter_tapandtoast/pages/order_summary_page.dart';
+import 'package:flutter_tapandtoast/pages/search_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'pages/home_page.dart';
 import 'services/cart_service.dart';
@@ -246,11 +247,11 @@ class _MyHomePageState extends State<MyHomePage> {
 
   // Legacy placeholder cart removed; using CartService instead.
 
-  static const List<Widget> _pages = <Widget>[
-    HomePage(),
-    Center(child: Text('Search')),
-    OrdersPage(),
-    ProfilePage(),
+  static final List<Widget> _pages = <Widget>[
+    const HomePage(),
+    const SearchPage(),
+    const OrdersPage(),
+    const ProfilePage(),
   ];
 
   void _onItemTapped(int index) {
@@ -261,74 +262,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isSearchTab = _currentIndex == 1;
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_titles[_currentIndex]),
-        centerTitle: true,
-        actions: _currentIndex == 0
-            ? <Widget>[
-                StreamBuilder<int>(
-                  initialData: CartService.instance.totalQuantity,
-                  stream: CartService.instance.totalQuantityStream,
-                  builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
-                    final int count = snapshot.data ?? 0;
-                    return Stack(
-                      alignment: Alignment.center,
-                      children: <Widget>[
-                        IconButton(
-                          onPressed: () {
-                            final items = CartService.instance.items
-                                .map(
-                                  (e) => CartItem(
-                                    productId: e.productId,
-                                    name: e.name,
-                                    quantity: e.quantity,
-                                    unitPrice: e.unitPrice,
-                                    image: e.imageUrl,
-                                  ),
-                                )
-                                .toList();
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => OrderSummaryPage(items: items),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.shopping_cart_outlined),
-                          tooltip: 'Cart',
-                        ),
-                        if (count > 0)
-                          Positioned(
-                            right: 10,
-                            top: 12,
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary,
-                                shape: BoxShape.circle,
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: 18,
-                                minHeight: 18,
-                              ),
-                              child: Text(
-                                '$count',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-                      ],
-                    );
-                  },
-                ),
-              ]
-            : null,
-      ),
+      appBar: isSearchTab ? null : _buildAppBar(context),
       body: _pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
@@ -357,6 +294,76 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ],
       ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
+    return AppBar(
+      title: Text(_titles[_currentIndex]),
+      centerTitle: true,
+      actions: _currentIndex == 0
+          ? <Widget>[
+              StreamBuilder<int>(
+                initialData: CartService.instance.totalQuantity,
+                stream: CartService.instance.totalQuantityStream,
+                builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
+                  final int count = snapshot.data ?? 0;
+                  return Stack(
+                    alignment: Alignment.center,
+                    children: <Widget>[
+                      IconButton(
+                        onPressed: () {
+                          final items = CartService.instance.items
+                              .map(
+                                (e) => CartItem(
+                                  productId: e.productId,
+                                  name: e.name,
+                                  quantity: e.quantity,
+                                  unitPrice: e.unitPrice,
+                                  image: e.imageUrl,
+                                ),
+                              )
+                              .toList();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => OrderSummaryPage(items: items),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.shopping_cart_outlined),
+                        tooltip: 'Cart',
+                      ),
+                      if (count > 0)
+                        Positioned(
+                          right: 10,
+                          top: 12,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primary,
+                              shape: BoxShape.circle,
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 18,
+                              minHeight: 18,
+                            ),
+                            child: Text(
+                              '$count',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ]
+          : null,
     );
   }
 }
