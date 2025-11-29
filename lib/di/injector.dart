@@ -51,7 +51,10 @@ Future<void> setupDependencies() async {
     () => AuthRepositoryImpl(injector.get<ApiClient>()),
   );
   injector.registerLazySingleton<ProductRepository>(
-    () => ProductRepositoryImpl(injector.get<ApiClient>()),
+    () => ProductRepositoryImpl(
+      injector.get<ApiClient>(),
+      injector.get<CacheContext<String>>(),
+    ),
   );
   injector.registerLazySingleton<OrderRepository>(
     () => OrderRepositoryImpl(injector.get<ApiClient>()),

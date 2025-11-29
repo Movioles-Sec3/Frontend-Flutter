@@ -4,7 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../services/image_cache_manager.dart';
 import '../widgets/offline_notice.dart';
 import 'products_by_category_page.dart';
-import 'search_page.dart';
 import '../widgets/recommendations_widget.dart';
 
 class HomePage extends StatelessWidget {
@@ -46,7 +45,6 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -54,7 +52,6 @@ class HomePage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             const OfflineNotice(),
-            _SearchBar(colors: colors),
             const SizedBox(height: 16),
             _Promotions(promotions: _promotions),
             const SizedBox(height: 16),
@@ -78,37 +75,6 @@ class HomePage extends StatelessWidget {
             _NearbyList(venues: _nearbyVenues),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SearchBar extends StatelessWidget {
-  const _SearchBar({required this.colors});
-
-  final ColorScheme colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: TextField(
-        readOnly: true,
-        showCursor: false,
-        decoration: const InputDecoration(
-          icon: Icon(Icons.search),
-          hintText: 'Search products',
-          border: InputBorder.none,
-        ),
-        onTap: () {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute<void>(builder: (_) => const SearchPage()));
-        },
       ),
     );
   }

@@ -8,6 +8,7 @@ import '../core/result.dart';
 import '../domain/entities/product.dart';
 import '../domain/usecases/search_products_usecase.dart';
 import '../services/cart_service.dart';
+import '../widgets/offline_notice.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -57,11 +58,23 @@ class _SearchPageState extends State<SearchPage> {
       _error = null;
     });
 
-    final Result<List<ProductEntity>> result = await _searchProductsUseCase(
-      query: query,
-      includeUnavailable: _includeUnavailable,
-      limit: 20,
-    );
+    Result<List<ProductEntity>> result;
+    try {
+      result = await _searchProductsUseCase(
+        query: query,
+        includeUnavailable: _includeUnavailable,
+        limit: 20,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error =
+            'You appear to be offline. Try again once you regain connectivity.';
+        _results = <ProductEntity>[];
+        _isLoading = false;
+      });
+      return;
+    }
 
     if (!mounted) return;
 
@@ -71,8 +84,28 @@ class _SearchPageState extends State<SearchPage> {
         _isLoading = false;
       });
     } else {
+      String errorMessage = result.error ?? 'We could not complete the search.';
+      final String normalized = errorMessage.toLowerCase();
+      final bool offline =
+          normalized.contains('network') ||
+          normalized.contains('socketexception') ||
+          normalized.contains('internet');
+
+      if (offline && mounted) {
+        final ScaffoldMessengerState? messenger = ScaffoldMessenger.maybeOf(
+          context,
+        );
+        messenger?.showSnackBar(
+          const SnackBar(
+            content: Text('You are offline. Try again once you reconnect.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        errorMessage = 'You are offline. Try again once you reconnect.';
+      }
+
       setState(() {
-        _error = result.error ?? 'We could not complete the search.';
+        _error = errorMessage;
         _results = <ProductEntity>[];
         _isLoading = false;
       });
@@ -112,6 +145,8 @@ class _SearchPageState extends State<SearchPage> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: <Widget>[
+            const OfflineNotice(),
+            const SizedBox(height: 12),
             TextField(
               controller: _controller,
               onChanged: _onQueryChanged,
@@ -283,6 +318,7 @@ class _ProductThumbnail extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: CachedNetworkImage(
           imageUrl: imageUrl,
+          cacheKey: 'img:product:$imageUrl',
           width: 56,
           height: 56,
           fit: BoxFit.cover,
