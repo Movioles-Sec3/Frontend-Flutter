@@ -8,7 +8,7 @@ class ProductLocalStorage {
   ProductLocalStorage({Duration? defaultTtl}) : _defaultTtl = defaultTtl;
 
   static const String _dbName = 'product_cache.db';
-  static const int _dbVersion = 1;
+  static const int _dbVersion = 2;
   static const String _tableProducts = 'products';
 
   final Duration? _defaultTtl;
@@ -23,7 +23,6 @@ class ProductLocalStorage {
 
     final String dbPath = await getDatabasesPath();
     final String fullPath = p.join(dbPath, _dbName);
-
     _db = await openDatabase(
       fullPath,
       version: _dbVersion,
@@ -37,9 +36,17 @@ class ProductLocalStorage {
             image_url TEXT NOT NULL,
             price REAL NOT NULL,
             available INTEGER NOT NULL,
-            updated_at TEXT NOT NULL
+            updated_at TEXT NOT NULL,
+            note TEXT
           )
         ''');
+      },
+      onUpgrade: (Database db, int oldVersion, int newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+            'ALTER TABLE $_tableProducts ADD COLUMN note TEXT',
+          );
+        }
       },
     );
 
@@ -59,6 +66,7 @@ class ProductLocalStorage {
         'price': data.price,
         'available': data.available ? 1 : 0,
         'updated_at': DateTime.now().toIso8601String(),
+        'note': data.note,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -96,6 +104,7 @@ class ProductLocalStorage {
       price: (row['price'] as num?)?.toDouble() ?? 0,
       available: (row['available'] as num?)?.toInt() == 1,
       heroTag: 'product-${(row['id'] as num?)?.toInt() ?? 0}',
+      note: (row['note'] ?? '').toString(),
     );
   }
 

@@ -116,6 +116,19 @@ class OrdersDb {
     return rows.map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
   }
 
+  Future<List<Map<String, dynamic>>> getOrderItemsByProduct(
+    int productId,
+  ) async {
+    final db = await database;
+    final List<Map<String, Object?>> rows = await db.query(
+      'order_items',
+      columns: <String>['quantity'],
+      where: 'product_id = ?',
+      whereArgs: <Object?>[productId],
+    );
+    return rows.map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+  }
+
   Future<void> updateOrderStatus({
     required int id,
     required String status,
@@ -135,5 +148,4 @@ class OrdersDb {
     );
   }
 }
-
 

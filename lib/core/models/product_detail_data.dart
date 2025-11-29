@@ -10,6 +10,7 @@ class ProductInput {
     required this.imageUrl,
     required this.price,
     required this.available,
+    this.note = '',
   });
 
   final int id;
@@ -19,6 +20,7 @@ class ProductInput {
   final String imageUrl;
   final double price;
   final bool available;
+  final String note;
 
   factory ProductInput.fromEntity(ProductEntity p) {
     return ProductInput(
@@ -29,6 +31,7 @@ class ProductInput {
       imageUrl: p.imageUrl,
       price: p.price,
       available: p.available,
+      note: '',
     );
   }
 }
@@ -44,6 +47,7 @@ class PreparedProductData {
     required this.price,
     required this.available,
     required this.heroTag,
+    this.note = '',
   });
 
   final int id;
@@ -54,6 +58,7 @@ class PreparedProductData {
   final double price;
   final bool available;
   final String heroTag;
+  final String note;
 
   factory PreparedProductData.fromEntity(ProductEntity p) {
     return PreparedProductData(
@@ -67,6 +72,31 @@ class PreparedProductData {
       price: p.price,
       available: p.available,
       heroTag: 'product-${p.id}',
+      note: '',
+    );
+  }
+
+  PreparedProductData copyWith({
+    int? id,
+    int? typeId,
+    String? name,
+    String? description,
+    String? imageUrl,
+    double? price,
+    bool? available,
+    String? heroTag,
+    String? note,
+  }) {
+    return PreparedProductData(
+      id: id ?? this.id,
+      typeId: typeId ?? this.typeId,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      imageUrl: imageUrl ?? this.imageUrl,
+      price: price ?? this.price,
+      available: available ?? this.available,
+      heroTag: heroTag ?? this.heroTag,
+      note: note ?? this.note,
     );
   }
 }
@@ -86,5 +116,6 @@ PreparedProductData prepareProductData(ProductInput input) {
     price: input.price,
     available: input.available,
     heroTag: 'product-${input.id}',
+    note: input.note,
   );
 }
