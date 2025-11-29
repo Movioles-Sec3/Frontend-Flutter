@@ -330,6 +330,10 @@ class _RecommendationsWidgetState extends State<RecommendationsWidget> {
                             cacheKey: 'img:product:${product.imageUrl}',
                             cacheManager: AppImageCacheManagers.productImages,
                             fit: BoxFit.cover,
+                            memCacheWidth: 400,
+                            memCacheHeight: 240,
+                            fadeInDuration: const Duration(milliseconds: 200),
+                            placeholderFadeInDuration: const Duration(milliseconds: 100),
                             placeholder: (_, __) => const SizedBox.shrink(),
                             errorWidget: (_, __, ___) => const Icon(
                               Icons.image_not_supported,

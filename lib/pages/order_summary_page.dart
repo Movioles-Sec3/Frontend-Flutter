@@ -9,6 +9,7 @@ import 'package:flutter_tapandtoast/pages/order_pickup_page.dart';
 import 'package:intl/intl.dart';
 import 'package:get_it/get_it.dart';
 import '../services/cart_service.dart';
+import '../services/product_order_stats.dart';
 import '../core/result.dart';
 import '../domain/entities/order.dart';
 import '../domain/usecases/create_order_usecase.dart';
@@ -281,6 +282,18 @@ class OrderSummaryPage extends StatelessWidget {
                                 items: items,
                               ),
                             );
+
+                            // Track product order statistics for personalized sorting
+                            final productQuantities = <int, int>{};
+                            for (final item in data) {
+                              productQuantities[item.productId] = item.quantity;
+                            }
+                            unawaited(
+                              ProductOrderStats.instance.recordMultipleProducts(
+                                productQuantities,
+                              ),
+                            );
+
                             Navigator.pushReplacement(
                               context,
                               MaterialPageRoute<OrderPickupPage>(
@@ -386,14 +399,21 @@ class _EditableProductTile extends StatelessWidget {
             fit: BoxFit.cover,
             memCacheWidth: 256,
             memCacheHeight: 256,
-            placeholder: (_, __) => Container(color: Colors.black12),
+            fadeInDuration: const Duration(milliseconds: 200),
+            placeholderFadeInDuration: const Duration(milliseconds: 100),
+            placeholder: (_, __) => const ColoredBox(color: Color(0xFFE0E0E0)),
             errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
           )
         : hasImage
-        ? Image.asset(item.imageUrl, fit: BoxFit.cover)
-        : Container(
-            color: Colors.black12,
-            child: const Icon(Icons.image_outlined),
+        ? Image.asset(
+            item.imageUrl,
+            fit: BoxFit.cover,
+            cacheWidth: 256,
+            cacheHeight: 256,
+          )
+        : const ColoredBox(
+            color: Color(0xFFE0E0E0),
+            child: Icon(Icons.image_outlined),
           );
 
     return Container(

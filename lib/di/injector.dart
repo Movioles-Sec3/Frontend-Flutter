@@ -31,6 +31,7 @@ import '../domain/usecases/submit_seat_delivery_survey_usecase.dart';
 import '../services/form_cache_service.dart';
 import '../services/profile_local_storage.dart';
 import '../services/product_local_storage.dart';
+import '../services/product_order_stats.dart';
 import '../services/session_manager.dart';
 import '../services/search_history_service.dart';
 
@@ -150,5 +151,8 @@ Future<void> setupDependencies() async {
 
   final SearchHistoryService searchHistoryService = SearchHistoryService();
   await searchHistoryService.init();
+
+  // Initialize ProductOrderStats singleton
+  await ProductOrderStats.instance.init();
   injector.registerSingleton<SearchHistoryService>(searchHistoryService);
 }
