@@ -11,6 +11,7 @@ class ProductInput {
     required this.price,
     required this.available,
     this.note = '',
+    this.timesOrdered = 0,
   });
 
   final int id;
@@ -21,6 +22,7 @@ class ProductInput {
   final double price;
   final bool available;
   final String note;
+  final int timesOrdered;
 
   factory ProductInput.fromEntity(ProductEntity p) {
     return ProductInput(
@@ -32,6 +34,7 @@ class ProductInput {
       price: p.price,
       available: p.available,
       note: '',
+      timesOrdered: 0,
     );
   }
 }
@@ -48,6 +51,7 @@ class PreparedProductData {
     required this.available,
     required this.heroTag,
     this.note = '',
+    this.timesOrdered = 0,
   });
 
   final int id;
@@ -59,6 +63,7 @@ class PreparedProductData {
   final bool available;
   final String heroTag;
   final String note;
+  final int timesOrdered;
 
   factory PreparedProductData.fromEntity(ProductEntity p) {
     return PreparedProductData(
@@ -73,6 +78,7 @@ class PreparedProductData {
       available: p.available,
       heroTag: 'product-${p.id}',
       note: '',
+      timesOrdered: 0,
     );
   }
 
@@ -86,6 +92,7 @@ class PreparedProductData {
     bool? available,
     String? heroTag,
     String? note,
+    int? timesOrdered,
   }) {
     return PreparedProductData(
       id: id ?? this.id,
@@ -97,6 +104,7 @@ class PreparedProductData {
       available: available ?? this.available,
       heroTag: heroTag ?? this.heroTag,
       note: note ?? this.note,
+      timesOrdered: timesOrdered ?? this.timesOrdered,
     );
   }
 }
@@ -117,5 +125,6 @@ PreparedProductData prepareProductData(ProductInput input) {
     available: input.available,
     heroTag: 'product-${input.id}',
     note: input.note,
+    timesOrdered: input.timesOrdered,
   );
 }

@@ -8,7 +8,7 @@ class ProductLocalStorage {
   ProductLocalStorage({Duration? defaultTtl}) : _defaultTtl = defaultTtl;
 
   static const String _dbName = 'product_cache.db';
-  static const int _dbVersion = 3;
+  static const int _dbVersion = 2;
   static const String _tableProducts = 'products';
 
   final Duration? _defaultTtl;
@@ -37,8 +37,7 @@ class ProductLocalStorage {
             price REAL NOT NULL,
             available INTEGER NOT NULL,
             updated_at TEXT NOT NULL,
-            note TEXT,
-            times_ordered INTEGER NOT NULL DEFAULT 0
+            note TEXT
           )
         ''');
       },
@@ -46,11 +45,6 @@ class ProductLocalStorage {
         if (oldVersion < 2) {
           await db.execute(
             'ALTER TABLE $_tableProducts ADD COLUMN note TEXT',
-          );
-        }
-        if (oldVersion < 3) {
-          await db.execute(
-            'ALTER TABLE $_tableProducts ADD COLUMN times_ordered INTEGER NOT NULL DEFAULT 0',
           );
         }
       },
@@ -73,7 +67,6 @@ class ProductLocalStorage {
         'available': data.available ? 1 : 0,
         'updated_at': DateTime.now().toIso8601String(),
         'note': data.note,
-        'times_ordered': data.timesOrdered,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -112,7 +105,6 @@ class ProductLocalStorage {
       available: (row['available'] as num?)?.toInt() == 1,
       heroTag: 'product-${(row['id'] as num?)?.toInt() ?? 0}',
       note: (row['note'] ?? '').toString(),
-      timesOrdered: (row['times_ordered'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -127,19 +119,6 @@ class ProductLocalStorage {
     );
     if (rows.isEmpty) return '';
     return (rows.first['note'] ?? '').toString();
-  }
-
-  Future<int?> getOrderCount(int productId) async {
-    final Database db = await _openDb();
-    final List<Map<String, Object?>> rows = await db.query(
-      _tableProducts,
-      columns: <String>['times_ordered'],
-      where: 'id = ?',
-      whereArgs: <Object>[productId],
-      limit: 1,
-    );
-    if (rows.isEmpty) return null;
-    return (rows.first['times_ordered'] as num?)?.toInt();
   }
 
   Future<void> deleteExpired(Duration maxAge) async {
