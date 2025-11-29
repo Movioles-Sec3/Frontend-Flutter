@@ -26,6 +26,7 @@ class HomePage extends StatelessWidget {
     _Category(id: 1, label: 'Beers', icon: Icons.local_drink_outlined),
     _Category(id: 2, label: 'Cocktails', icon: Icons.wine_bar_outlined),
     _Category(id: 3, label: 'Tapas', icon: Icons.fastfood_outlined),
+    _Category(id: 4, label: 'Snacks', icon: Icons.lunch_dining_outlined),
   ];
 
   static const List<_Venue> _nearbyVenues = <_Venue>[

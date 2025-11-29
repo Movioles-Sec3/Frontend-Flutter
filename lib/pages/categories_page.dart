@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_tapandtoast/pages/product_page.dart';
-
-import '../domain/entities/product.dart';
+import 'products_by_category_page.dart';
 
 class CategoriesPage extends StatelessWidget {
   const CategoriesPage({super.key});
 
   static const List<_Cat> _categories = <_Cat>[
-    _Cat(label: 'Drinks', icon: Icons.local_bar_outlined),
-    _Cat(label: 'Food', icon: Icons.restaurant_outlined),
-    _Cat(label: 'Snacks', icon: Icons.lunch_dining_outlined),
-    _Cat(label: 'Desserts', icon: Icons.icecream_outlined),
-    _Cat(label: 'Coffee', icon: Icons.local_cafe_outlined),
-    _Cat(label: 'Beer', icon: Icons.sports_bar_outlined),
+    _Cat(id: 1, label: 'Beers', icon: Icons.local_drink_outlined),
+    _Cat(id: 2, label: 'Cocktails', icon: Icons.wine_bar_outlined),
+    _Cat(id: 3, label: 'Tapas', icon: Icons.fastfood_outlined),
+    _Cat(id: 4, label: 'Snacks', icon: Icons.lunch_dining_outlined),
+    _Cat(id: 5, label: 'Desserts', icon: Icons.icecream_outlined),
+    _Cat(id: 6, label: 'Coffee', icon: Icons.local_cafe_outlined),
   ];
 
   @override
@@ -34,24 +32,14 @@ class CategoriesPage extends StatelessWidget {
             final _Cat cat = _categories[index];
             return OutlinedButton.icon(
               onPressed: () {
-                if (cat.label == 'Drinks') {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => ProductPage(
-                        product: ProductEntity(
-                          id: 0,
-                          typeId: 0,
-                          name: 'Mojito clásico',
-                          description:
-                              'Ejemplo de vista de detalle. Selecciona un producto real desde el catálogo para ver sus datos completos.',
-                          imageUrl: 'assets/img/mojito.png',
-                          price: 8,
-                          available: true,
-                        ),
-                      ),
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ProductsByCategoryPage(
+                      categoryId: cat.id,
+                      categoryName: cat.label,
                     ),
-                  );
-                }
+                  ),
+                );
               },
               icon: Icon(cat.icon),
               label: Text(cat.label),
@@ -74,7 +62,8 @@ class CategoriesPage extends StatelessWidget {
 }
 
 class _Cat {
-  const _Cat({required this.label, required this.icon});
+  const _Cat({required this.id, required this.label, required this.icon});
+  final int id;
   final String label;
   final IconData icon;
 }
