@@ -108,9 +108,11 @@ class _Promotions extends StatelessWidget {
                       fit: BoxFit.cover,
                       memCacheWidth: 800,
                       memCacheHeight: 400,
-                      placeholder: (_, __) => Container(
-                        color: Colors.black12,
-                        child: const Center(
+                      fadeInDuration: const Duration(milliseconds: 200),
+                      placeholderFadeInDuration: const Duration(milliseconds: 100),
+                      placeholder: (_, __) => const ColoredBox(
+                        color: Color(0xFFE0E0E0),
+                        child: Center(
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                       ),
@@ -238,7 +240,9 @@ class _NearbyList extends StatelessWidget {
                 fit: BoxFit.cover,
                 memCacheWidth: 360,
                 memCacheHeight: 252,
-                placeholder: (_, __) => Container(color: Colors.black12),
+                fadeInDuration: const Duration(milliseconds: 200),
+                placeholderFadeInDuration: const Duration(milliseconds: 100),
+                placeholder: (_, __) => const ColoredBox(color: Color(0xFFE0E0E0)),
                 errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
               ),
             ),

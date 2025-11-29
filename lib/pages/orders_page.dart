@@ -423,62 +423,61 @@ class _OrdersPageState extends State<OrdersPage> {
           final double total = o.total;
           final String estado = o.status;
           final String fecha = o.placedAt;
+          final Color statusColor = _statusColor(estado, context);
 
-          return Card(
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: _statusColor(
-                  estado,
-                  context,
-                ).withOpacity(0.15),
-                child: Text(
-                  id.toString(),
-                  style: TextStyle(
-                    color: _statusColor(estado, context),
-                    fontWeight: FontWeight.w600,
+          return RepaintBoundary(
+            child: Card(
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: statusColor.withValues(alpha: 0.15),
+                  child: Text(
+                    id.toString(),
+                    style: TextStyle(
+                      color: statusColor,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-              ),
-              title: Text('Order #$id'),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text('Status: $estado'),
-                  Text('Placed at: ${_formatDate(fecha)}'),
-                ],
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Text('\$${total.toStringAsFixed(2)}'),
-                  const SizedBox(width: 8),
-                  PopupMenuButton<String>(
-                    onSelected: (String value) {
-                      if (value == 'reorder') {
-                        _reorder(id);
-                      } else if (value == 'view') {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => OrderPickupPage(
-                              order:
-                                  o.raw ??
-                                  <String, dynamic>{
-                                    'id': o.id,
-                                    'total': o.total,
-                                    'estado': o.status,
-                                    'fecha_hora': o.placedAt,
-                                    'fecha_listo': o.readyAt ?? '',
-                                    'fecha_entregado': o.deliveredAt ?? '',
-                                    if (o.qr != null) 'qr': o.qr,
-                                  },
+                title: Text('Order #$id'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text('Status: $estado'),
+                    Text('Placed at: ${_formatDate(fecha)}'),
+                  ],
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text('\$${total.toStringAsFixed(2)}'),
+                    const SizedBox(width: 8),
+                    PopupMenuButton<String>(
+                      onSelected: (String value) {
+                        if (value == 'reorder') {
+                          _reorder(id);
+                        } else if (value == 'view') {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => OrderPickupPage(
+                                order:
+                                    o.raw ??
+                                    <String, dynamic>{
+                                      'id': o.id,
+                                      'total': o.total,
+                                      'estado': o.status,
+                                      'fecha_hora': o.placedAt,
+                                      'fecha_listo': o.readyAt ?? '',
+                                      'fecha_entregado': o.deliveredAt ?? '',
+                                      if (o.qr != null) 'qr': o.qr,
+                                    },
+                              ),
                             ),
-                          ),
-                        );
-                      }
-                    },
-                    itemBuilder: (BuildContext context) =>
-                        <PopupMenuEntry<String>>[
-                          const PopupMenuItem<String>(
+                          );
+                        }
+                      },
+                      itemBuilder: (BuildContext context) =>
+                          <PopupMenuEntry<String>>[
+                            const PopupMenuItem<String>(
                             value: 'view',
                             child: Row(
                               children: <Widget>[
@@ -499,29 +498,11 @@ class _OrdersPageState extends State<OrdersPage> {
                             ),
                           ),
                         ],
-                    child: const Icon(Icons.more_vert),
-                  ),
-                ],
-              ),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => OrderPickupPage(
-                      order:
-                          o.raw ??
-                          <String, dynamic>{
-                            'id': o.id,
-                            'total': o.total,
-                            'estado': o.status,
-                            'fecha_hora': o.placedAt,
-                            'fecha_listo': o.readyAt ?? '',
-                            'fecha_entregado': o.deliveredAt ?? '',
-                            if (o.qr != null) 'qr': o.qr,
-                          },
+                      icon: const Icon(Icons.more_vert),
                     ),
-                  ),
-                );
-              },
+                  ],
+                ),
+              ),
             ),
           );
         },

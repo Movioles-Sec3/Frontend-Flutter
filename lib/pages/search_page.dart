@@ -42,6 +42,7 @@ class _SearchPageState extends State<SearchPage> {
   List<ProductEntity> _favoriteProducts = <ProductEntity>[];
   bool _favoritesLoading = false;
   bool _isSearchingLocally = false;
+  String? _lastSearchQuery; // Track last query to avoid duplicate searches
 
   @override
   void initState() {
@@ -55,14 +56,37 @@ class _SearchPageState extends State<SearchPage> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _debounce = null;
     _searchHistoryService.removeListener(_onHistoryChanged);
     _controller.dispose();
     super.dispose();
   }
 
   void _onQueryChanged(String value) {
-    _debounce?.cancel();
-    _debounce = Timer(_debounceDuration, () => _search(value));
+    // Cancel any pending search immediately
+    if (_debounce?.isActive ?? false) {
+      _debounce!.cancel();
+    }
+
+    // Early return for empty or duplicate queries
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      setState(() {
+        _results = <ProductEntity>[];
+        _error = null;
+        _isLoading = false;
+        _isSearchingLocally = false;
+        _lastSearchQuery = null;
+      });
+      return;
+    }
+
+    // Debounce: wait for user to stop typing
+    _debounce = Timer(_debounceDuration, () {
+      if (mounted) {
+        _search(value);
+      }
+    });
   }
 
   void _onHistoryChanged() {
@@ -74,6 +98,10 @@ class _SearchPageState extends State<SearchPage> {
 
   Future<void> _search(String rawQuery) async {
     final String query = rawQuery.trim();
+
+    // Avoid duplicate searches
+    if (query == _lastSearchQuery) return;
+    _lastSearchQuery = query;
     if (query.isEmpty) {
       setState(() {
         _results = <ProductEntity>[];
@@ -634,60 +662,62 @@ class _ProductResultTile extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final bool isAvailable = product.available;
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: ListTile(
-        onTap: onViewDetail,
-        leading: _ProductThumbnail(imageUrl: product.imageUrl),
-        title: Text(product.name),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              product.description,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '\$${product.price.toStringAsFixed(2)}',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
+    return RepaintBoundary(
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          onTap: onViewDetail,
+          leading: _ProductThumbnail(imageUrl: product.imageUrl),
+          title: Text(product.name),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                product.description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
               ),
-            ),
-            if (!isAvailable)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Chip(
-                  visualDensity: VisualDensity.compact,
-                  label: const Text('Unavailable'),
+              const SizedBox(height: 4),
+              Text(
+                '\$${product.price.toStringAsFixed(2)}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-          ],
-        ),
-        isThreeLine: true,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            IconButton(
-              onPressed: onToggleFavorite,
-              icon: Icon(
-                isFavorite ? Icons.star : Icons.star_outline,
-                color: isFavorite
-                    ? theme.colorScheme.primary
-                    : theme.iconTheme.color,
+              if (!isAvailable)
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text('Unavailable'),
+                  ),
+                ),
+            ],
+          ),
+          isThreeLine: true,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              IconButton(
+                onPressed: onToggleFavorite,
+                icon: Icon(
+                  isFavorite ? Icons.star : Icons.star_outline,
+                  color: isFavorite
+                      ? theme.colorScheme.primary
+                      : theme.iconTheme.color,
+                ),
+                tooltip: isFavorite
+                    ? 'Remove from favorites'
+                    : 'Add to favorites',
               ),
-              tooltip: isFavorite
-                  ? 'Remove from favorites'
-                  : 'Add to favorites',
-            ),
-            IconButton(
-              onPressed: isAvailable ? onAddToCart : null,
-              icon: const Icon(Icons.add_shopping_cart_outlined),
-              tooltip: isAvailable ? 'Add to cart' : 'Product unavailable',
-            ),
-          ],
+              IconButton(
+                onPressed: isAvailable ? onAddToCart : null,
+                icon: const Icon(Icons.add_shopping_cart_outlined),
+                tooltip: isAvailable ? 'Add to cart' : 'Product unavailable',
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -714,11 +744,13 @@ class _ProductThumbnail extends StatelessWidget {
           width: 56,
           height: 56,
           fit: BoxFit.cover,
-          placeholder: (_, __) => Container(
-            width: 56,
-            height: 56,
-            color: Colors.black12,
-            child: const Center(
+          memCacheWidth: 112,
+          memCacheHeight: 112,
+          fadeInDuration: const Duration(milliseconds: 200),
+          placeholderFadeInDuration: const Duration(milliseconds: 100),
+          placeholder: (_, __) => const ColoredBox(
+            color: Color(0xFFE0E0E0),
+            child: Center(
               child: SizedBox(
                 width: 18,
                 height: 18,
