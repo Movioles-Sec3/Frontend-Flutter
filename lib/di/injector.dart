@@ -32,6 +32,7 @@ import '../services/form_cache_service.dart';
 import '../services/profile_local_storage.dart';
 import '../services/product_local_storage.dart';
 import '../services/session_manager.dart';
+import '../services/search_history_service.dart';
 
 final GetIt injector = GetIt.instance;
 
@@ -146,4 +147,8 @@ Future<void> setupDependencies() async {
   );
   await productLocalStorage.init();
   injector.registerSingleton<ProductLocalStorage>(productLocalStorage);
+
+  final SearchHistoryService searchHistoryService = SearchHistoryService();
+  await searchHistoryService.init();
+  injector.registerSingleton<SearchHistoryService>(searchHistoryService);
 }

@@ -9,6 +9,7 @@ import '../domain/entities/product.dart';
 import '../domain/usecases/search_products_usecase.dart';
 import '../services/cart_service.dart';
 import '../widgets/offline_notice.dart';
+import '../services/search_history_service.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -23,16 +24,27 @@ class _SearchPageState extends State<SearchPage> {
   final TextEditingController _controller = TextEditingController();
   final SearchProductsUseCase _searchProductsUseCase = GetIt.I
       .get<SearchProductsUseCase>();
+  late final SearchHistoryService _searchHistoryService;
 
   Timer? _debounce;
   bool _isLoading = false;
   bool _includeUnavailable = false;
   String? _error;
   List<ProductEntity> _results = <ProductEntity>[];
+  List<String> _history = <String>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _searchHistoryService = GetIt.I.get<SearchHistoryService>();
+    _history = _searchHistoryService.history;
+    _searchHistoryService.addListener(_onHistoryChanged);
+  }
 
   @override
   void dispose() {
     _debounce?.cancel();
+    _searchHistoryService.removeListener(_onHistoryChanged);
     _controller.dispose();
     super.dispose();
   }
@@ -40,6 +52,13 @@ class _SearchPageState extends State<SearchPage> {
   void _onQueryChanged(String value) {
     _debounce?.cancel();
     _debounce = Timer(_debounceDuration, () => _search(value));
+  }
+
+  void _onHistoryChanged() {
+    if (!mounted) return;
+    setState(() {
+      _history = _searchHistoryService.history;
+    });
   }
 
   Future<void> _search(String rawQuery) async {
@@ -79,10 +98,12 @@ class _SearchPageState extends State<SearchPage> {
     if (!mounted) return;
 
     if (result.isSuccess) {
+      final List<ProductEntity> items = result.data ?? <ProductEntity>[];
       setState(() {
-        _results = result.data ?? <ProductEntity>[];
+        _results = items;
         _isLoading = false;
       });
+      await _searchHistoryService.addQuery(query);
     } else {
       String errorMessage = result.error ?? 'We could not complete the search.';
       final String normalized = errorMessage.toLowerCase();
@@ -173,6 +194,10 @@ class _SearchPageState extends State<SearchPage> {
               title: const Text('Show unavailable products'),
               contentPadding: EdgeInsets.zero,
             ),
+            if (_history.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 12),
+              _buildHistorySection(theme),
+            ],
             const SizedBox(height: 12),
             if (_isLoading) const LinearProgressIndicator(),
             const SizedBox(height: 12),
@@ -363,5 +388,55 @@ class _FallbackThumbnail extends StatelessWidget {
         color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
+  }
+}
+
+extension on _SearchPageState {
+  Widget _buildHistorySection(ThemeData theme) {
+    if (_history.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            Text(
+              'Recent searches',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            TextButton(
+              onPressed: _history.isEmpty ? null : _clearHistory,
+              child: const Text('Clear'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _history.map((String query) {
+            return ActionChip(
+              label: Text(query),
+              onPressed: () {
+                _controller.text = query;
+                _controller.selection = TextSelection.fromPosition(
+                  TextPosition(offset: _controller.text.length),
+                );
+                _search(query);
+              },
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _clearHistory() async {
+    await _searchHistoryService.clear();
   }
 }
