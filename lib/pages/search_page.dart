@@ -8,8 +8,9 @@ import '../core/result.dart';
 import '../domain/entities/product.dart';
 import '../domain/usecases/search_products_usecase.dart';
 import '../services/cart_service.dart';
-import '../widgets/offline_notice.dart';
+import '../services/search_favorites_db.dart';
 import '../services/search_history_service.dart';
+import '../widgets/offline_notice.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -25,6 +26,7 @@ class _SearchPageState extends State<SearchPage> {
   final SearchProductsUseCase _searchProductsUseCase = GetIt.I
       .get<SearchProductsUseCase>();
   late final SearchHistoryService _searchHistoryService;
+  final SearchFavoritesDb _favoritesDb = SearchFavoritesDb.instance;
 
   Timer? _debounce;
   bool _isLoading = false;
@@ -32,6 +34,9 @@ class _SearchPageState extends State<SearchPage> {
   String? _error;
   List<ProductEntity> _results = <ProductEntity>[];
   List<String> _history = <String>[];
+  final Set<int> _favoriteIds = <int>{};
+  List<ProductEntity> _favoriteProducts = <ProductEntity>[];
+  bool _favoritesLoading = false;
 
   @override
   void initState() {
@@ -39,6 +44,7 @@ class _SearchPageState extends State<SearchPage> {
     _searchHistoryService = GetIt.I.get<SearchHistoryService>();
     _history = _searchHistoryService.history;
     _searchHistoryService.addListener(_onHistoryChanged);
+    _refreshFavorites();
   }
 
   @override
@@ -168,24 +174,36 @@ class _SearchPageState extends State<SearchPage> {
           children: <Widget>[
             const OfflineNotice(),
             const SizedBox(height: 12),
-            TextField(
-              controller: _controller,
-              onChanged: _onQueryChanged,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: 'Search products...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _controller.text.isNotEmpty
-                    ? IconButton(
-                        onPressed: () {
-                          _controller.clear();
-                          _search('');
-                        },
-                        icon: const Icon(Icons.close),
-                        tooltip: 'Limpiar búsqueda',
-                      )
-                    : null,
-              ),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    onChanged: _onQueryChanged,
+                    textInputAction: TextInputAction.search,
+                    decoration: InputDecoration(
+                      hintText: 'Search products...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _controller.text.isNotEmpty
+                          ? IconButton(
+                              onPressed: () {
+                                _controller.clear();
+                                _search('');
+                              },
+                              icon: const Icon(Icons.close),
+                              tooltip: 'Limpiar búsqueda',
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: _openFavoritesPane,
+                  tooltip: 'Ver favoritos',
+                  icon: const Icon(Icons.star_outline),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             SwitchListTile(
@@ -268,6 +286,175 @@ class _SearchPageState extends State<SearchPage> {
         return _ProductResultTile(
           product: product,
           onAddToCart: () => _addToCart(product),
+          isFavorite: _favoriteIds.contains(product.id),
+          onToggleFavorite: () => _toggleFavorite(product),
+        );
+      },
+    );
+  }
+
+  Widget _buildHistorySection(ThemeData theme) {
+    if (_history.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            Text(
+              'Recent searches',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            TextButton(
+              onPressed: _history.isEmpty ? null : _clearHistory,
+              child: const Text('Clear'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _history.map((String query) {
+            return ActionChip(
+              label: Text(query),
+              onPressed: () {
+                _controller.text = query;
+                _controller.selection = TextSelection.fromPosition(
+                  TextPosition(offset: _controller.text.length),
+                );
+                _search(query);
+              },
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _clearHistory() async {
+    await _searchHistoryService.clear();
+  }
+
+  Future<void> _refreshFavorites() async {
+    setState(() {
+      _favoritesLoading = true;
+    });
+    final List<ProductEntity> favorites = await _favoritesDb.getFavorites();
+    if (!mounted) return;
+    setState(() {
+      _favoriteProducts = favorites;
+      _favoriteIds
+        ..clear()
+        ..addAll(favorites.map((ProductEntity e) => e.id));
+      _favoritesLoading = false;
+    });
+  }
+
+  Future<void> _toggleFavorite(ProductEntity product) async {
+    final bool isFav = _favoriteIds.contains(product.id);
+    if (isFav) {
+      await _favoritesDb.removeFavorite(product.id);
+    } else {
+      await _favoritesDb.addFavorite(product);
+    }
+    if (!mounted) return;
+    await _refreshFavorites();
+  }
+
+  Future<void> _openFavoritesPane() async {
+    await _refreshFavorites();
+    if (!mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (BuildContext ctx) {
+        return SafeArea(
+          child: FractionallySizedBox(
+            heightFactor: 0.75,
+            child: StatefulBuilder(
+              builder: (BuildContext context, StateSetter setModalState) {
+                Future<void> refetch() async {
+                  await _refreshFavorites();
+                  if (!context.mounted) return;
+                  setModalState(() {});
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          Text(
+                            'Favorites',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const Spacer(),
+                          if (_favoriteProducts.isNotEmpty)
+                            TextButton(
+                              onPressed: () async {
+                                await _favoritesDb.clear();
+                                if (!mounted) return;
+                                await refetch();
+                              },
+                              child: const Text('Clear all'),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (_favoritesLoading)
+                        const Expanded(
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (_favoriteProducts.isEmpty)
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              'No favorites yet. Add some from the search results.',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                        )
+                      else
+                        Expanded(
+                          child: ListView.separated(
+                            itemCount: _favoriteProducts.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (BuildContext context, int index) {
+                              final ProductEntity product =
+                                  _favoriteProducts[index];
+                              return _ProductResultTile(
+                                product: product,
+                                onAddToCart: () => _addToCart(product),
+                                isFavorite: true,
+                                onToggleFavorite: () async {
+                                  await _toggleFavorite(product);
+                                  if (!context.mounted) return;
+                                  setModalState(() {});
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
         );
       },
     );
@@ -275,10 +462,17 @@ class _SearchPageState extends State<SearchPage> {
 }
 
 class _ProductResultTile extends StatelessWidget {
-  const _ProductResultTile({required this.product, required this.onAddToCart});
+  const _ProductResultTile({
+    required this.product,
+    required this.onAddToCart,
+    required this.isFavorite,
+    required this.onToggleFavorite,
+  });
 
   final ProductEntity product;
   final VoidCallback onAddToCart;
+  final bool isFavorite;
+  final VoidCallback onToggleFavorite;
 
   @override
   Widget build(BuildContext context) {
@@ -317,10 +511,27 @@ class _ProductResultTile extends StatelessWidget {
           ],
         ),
         isThreeLine: true,
-        trailing: IconButton(
-          onPressed: isAvailable ? onAddToCart : null,
-          icon: const Icon(Icons.add_shopping_cart_outlined),
-          tooltip: isAvailable ? 'Add to cart' : 'Product unavailable',
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            IconButton(
+              onPressed: onToggleFavorite,
+              icon: Icon(
+                isFavorite ? Icons.star : Icons.star_outline,
+                color: isFavorite
+                    ? theme.colorScheme.primary
+                    : theme.iconTheme.color,
+              ),
+              tooltip: isFavorite
+                  ? 'Remove from favorites'
+                  : 'Add to favorites',
+            ),
+            IconButton(
+              onPressed: isAvailable ? onAddToCart : null,
+              icon: const Icon(Icons.add_shopping_cart_outlined),
+              tooltip: isAvailable ? 'Add to cart' : 'Product unavailable',
+            ),
+          ],
         ),
       ),
     );
@@ -388,55 +599,5 @@ class _FallbackThumbnail extends StatelessWidget {
         color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
-  }
-}
-
-extension on _SearchPageState {
-  Widget _buildHistorySection(ThemeData theme) {
-    if (_history.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: <Widget>[
-            Text(
-              'Recent searches',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            TextButton(
-              onPressed: _history.isEmpty ? null : _clearHistory,
-              child: const Text('Clear'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _history.map((String query) {
-            return ActionChip(
-              label: Text(query),
-              onPressed: () {
-                _controller.text = query;
-                _controller.selection = TextSelection.fromPosition(
-                  TextPosition(offset: _controller.text.length),
-                );
-                _search(query);
-              },
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _clearHistory() async {
-    await _searchHistoryService.clear();
   }
 }

@@ -70,6 +70,7 @@ class _ProductsByCategoryPageState extends State<ProductsByCategoryPage> {
           .get<GetProductsByCategoryUseCase>();
       final Result<List<ProductEntity>> result = await useCase(
         widget.categoryId,
+        forceRefresh: true,
       );
 
       if (!mounted) return;

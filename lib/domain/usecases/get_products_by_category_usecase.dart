@@ -7,7 +7,10 @@ class GetProductsByCategoryUseCase {
 
   final ProductRepository _repo;
 
-  Future<Result<List<ProductEntity>>> call(int categoryId) {
-    return _repo.getByCategory(categoryId);
+  Future<Result<List<ProductEntity>>> call(
+    int categoryId, {
+    bool forceRefresh = false,
+  }) {
+    return _repo.getByCategory(categoryId, forceRefresh: forceRefresh);
   }
 }
