@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
@@ -10,6 +11,7 @@ import '../domain/usecases/search_products_usecase.dart';
 import '../services/cart_service.dart';
 import '../services/search_favorites_db.dart';
 import '../services/search_history_service.dart';
+import '../services/local_catalog_storage.dart';
 import '../widgets/offline_notice.dart';
 
 class SearchPage extends StatefulWidget {
@@ -21,6 +23,7 @@ class SearchPage extends StatefulWidget {
 
 class _SearchPageState extends State<SearchPage> {
   static const Duration _debounceDuration = Duration(milliseconds: 350);
+  static const int _localResultLimit = 40;
 
   final TextEditingController _controller = TextEditingController();
   final SearchProductsUseCase _searchProductsUseCase = GetIt.I
@@ -37,6 +40,7 @@ class _SearchPageState extends State<SearchPage> {
   final Set<int> _favoriteIds = <int>{};
   List<ProductEntity> _favoriteProducts = <ProductEntity>[];
   bool _favoritesLoading = false;
+  bool _isSearchingLocally = false;
 
   @override
   void initState() {
@@ -74,13 +78,29 @@ class _SearchPageState extends State<SearchPage> {
         _results = <ProductEntity>[];
         _error = null;
         _isLoading = false;
+        _isSearchingLocally = false;
       });
       return;
     }
 
     setState(() {
-      _isLoading = true;
       _error = null;
+      _isSearchingLocally = true;
+    });
+
+    List<ProductEntity> localResults = <ProductEntity>[];
+    try {
+      localResults = await _searchLocal(query);
+    } catch (_) {
+      // Swallow local errors; remote search will handle the user feedback.
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _results = localResults;
+      _isSearchingLocally = false;
+      _isLoading = true;
     });
 
     Result<List<ProductEntity>> result;
@@ -95,8 +115,10 @@ class _SearchPageState extends State<SearchPage> {
       setState(() {
         _error =
             'You appear to be offline. Try again once you regain connectivity.';
-        _results = <ProductEntity>[];
         _isLoading = false;
+        if (_results.isEmpty) {
+          _results = <ProductEntity>[];
+        }
       });
       return;
     }
@@ -108,6 +130,7 @@ class _SearchPageState extends State<SearchPage> {
       setState(() {
         _results = items;
         _isLoading = false;
+        _error = null;
       });
       await _searchHistoryService.addQuery(query);
     } else {
@@ -131,12 +154,35 @@ class _SearchPageState extends State<SearchPage> {
         errorMessage = 'You are offline. Try again once you reconnect.';
       }
 
+      final bool hadResults = _results.isNotEmpty;
+
       setState(() {
         _error = errorMessage;
-        _results = <ProductEntity>[];
         _isLoading = false;
+        if (!hadResults) {
+          _results = <ProductEntity>[];
+        }
       });
     }
+  }
+
+  Future<List<ProductEntity>> _searchLocal(String query) async {
+    final List<Map<String, dynamic>> localProducts = await LocalCatalogStorage
+        .instance
+        .readAllProducts();
+    if (localProducts.isEmpty) return <ProductEntity>[];
+
+    final List<Map<String, dynamic>> filtered =
+        await compute(_filterLocalProducts, <String, dynamic>{
+          'products': localProducts,
+          'query': query,
+          'includeUnavailable': _includeUnavailable,
+          'limit': _localResultLimit,
+        });
+
+    if (filtered.isEmpty) return <ProductEntity>[];
+
+    return filtered.map(ProductEntity.fromJson).toList(growable: false);
   }
 
   void _toggleIncludeUnavailable(bool value) {
@@ -217,6 +263,21 @@ class _SearchPageState extends State<SearchPage> {
               _buildHistorySection(theme),
             ],
             const SizedBox(height: 12),
+            if (_isSearchingLocally)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: const <Widget>[
+                    SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    SizedBox(width: 8),
+                    Text('Buscando resultados locales...'),
+                  ],
+                ),
+              ),
             if (_isLoading) const LinearProgressIndicator(),
             const SizedBox(height: 12),
             Expanded(child: _buildResults(theme, hasQuery)),
@@ -227,7 +288,9 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildResults(ThemeData theme, bool hasQuery) {
-    if (_error != null) {
+    final bool hasError = _error != null && _error!.isNotEmpty;
+
+    if (hasError && _results.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -279,10 +342,39 @@ class _SearchPageState extends State<SearchPage> {
     }
 
     return ListView.separated(
-      itemCount: _results.length,
+      itemCount: _results.length + (hasError ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (BuildContext context, int index) {
-        final ProductEntity product = _results[index];
+        if (hasError && index == 0) {
+          return Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.errorContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  color: theme.colorScheme.onErrorContainer,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _error!,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onErrorContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final int productIndex = hasError ? index - 1 : index;
+        final ProductEntity product = _results[productIndex];
         return _ProductResultTile(
           product: product,
           onAddToCart: () => _addToCart(product),
@@ -459,6 +551,51 @@ class _SearchPageState extends State<SearchPage> {
       },
     );
   }
+}
+
+List<Map<String, dynamic>> _filterLocalProducts(Map<String, dynamic> args) {
+  final List<dynamic> rawProducts =
+      args['products'] as List<dynamic>? ?? <dynamic>[];
+  final String query = (args['query'] ?? '').toString().trim().toLowerCase();
+
+  if (query.isEmpty || rawProducts.isEmpty) {
+    return <Map<String, dynamic>>[];
+  }
+
+  final bool includeUnavailable = args['includeUnavailable'] as bool? ?? false;
+  int limit = args['limit'] is int ? args['limit'] as int : 20;
+  if (limit < 1) limit = 1;
+  if (limit > 100) limit = 100;
+
+  final List<Map<String, dynamic>> matches = <Map<String, dynamic>>[];
+
+  for (final dynamic entry in rawProducts) {
+    if (entry is! Map<String, dynamic>) continue;
+    final Map<String, dynamic> product = entry;
+    final String name = (product['name'] ?? product['nombre'] ?? '').toString();
+    if (name.isEmpty) continue;
+
+    final dynamic availabilityRaw =
+        product['available'] ?? product['disponible'] ?? true;
+    final bool available = availabilityRaw is bool
+        ? availabilityRaw
+        : availabilityRaw is num
+        ? availabilityRaw != 0
+        : availabilityRaw.toString().toLowerCase() == 'true';
+
+    if (!includeUnavailable && !available) {
+      continue;
+    }
+
+    if (name.toLowerCase().contains(query)) {
+      matches.add(Map<String, dynamic>.from(product));
+      if (matches.length >= limit) {
+        break;
+      }
+    }
+  }
+
+  return matches;
 }
 
 class _ProductResultTile extends StatelessWidget {
