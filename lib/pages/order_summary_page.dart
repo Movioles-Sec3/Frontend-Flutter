@@ -157,7 +157,8 @@ class OrderSummaryPage extends StatelessWidget {
                             content: FutureBuilder<Map<String, double>>(
                               future: future,
                               builder: (context, snapshot) {
-                                if (!snapshot.hasData) {
+                                // Handle loading state
+                                if (snapshot.connectionState == ConnectionState.waiting) {
                                   return const SizedBox(
                                     height: 80,
                                     child: Center(
@@ -165,6 +166,49 @@ class OrderSummaryPage extends StatelessWidget {
                                     ),
                                   );
                                 }
+
+                                // Handle error state
+                                if (snapshot.hasError) {
+                                  final String errorMsg = snapshot.error.toString();
+                                  final bool isConnectivityError =
+                                      errorMsg.toLowerCase().contains('internet') ||
+                                      errorMsg.toLowerCase().contains('connection') ||
+                                      errorMsg.toLowerCase().contains('network') ||
+                                      errorMsg.toLowerCase().contains('offline') ||
+                                      errorMsg.toLowerCase().contains('timeout');
+
+                                  return Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        isConnectivityError ? Icons.wifi_off : Icons.error_outline,
+                                        size: 48,
+                                        color: isConnectivityError
+                                            ? Colors.orange
+                                            : Colors.red,
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        isConnectivityError
+                                            ? 'You are not connected to the internet.\nPlease check your connection and try again.'
+                                            : 'Could not load exchange rates.\nPlease try again later.',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                    ],
+                                  );
+                                }
+
+                                // Handle success state
+                                if (!snapshot.hasData) {
+                                  return const SizedBox(
+                                    height: 80,
+                                    child: Center(
+                                      child: Text('No data available'),
+                                    ),
+                                  );
+                                }
+
                                 final Map<String, double> rates =
                                     snapshot.data!;
                                 final double subtotalUsd =
