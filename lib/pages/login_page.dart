@@ -190,25 +190,6 @@ class _LoginPageState extends State<LoginPage> {
 
                     const SizedBox(height: 20),
 
-                    Row(
-                      children: const [
-                        Expanded(child: Divider()),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Text("or"),
-                        ),
-                        Expanded(child: Divider()),
-                      ],
-                    ),
-
-                    const SizedBox(height: 20),
-                    _socialButton("Continue with Facebook"),
-                    const SizedBox(height: 12),
-                    _socialButton("Continue with Twitter"),
-                    const SizedBox(height: 12),
-                    _socialButton("Continue with SMS"),
-
-                    const SizedBox(height: 20),
 
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -239,29 +220,6 @@ class _LoginPageState extends State<LoginPage> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _socialButton(String text) {
-    final ThemeData theme = Theme.of(context);
-    final bool isDark = theme.brightness == Brightness.dark;
-    final Color bg = isDark ? Colors.grey.shade800 : Colors.grey.shade200;
-    final Color fg = isDark ? Colors.white : Colors.black;
-    final Color border = isDark ? Colors.grey.shade700 : Colors.grey.shade300;
-    return SizedBox(
-      width: double.infinity,
-      height: 50,
-      child: OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          backgroundColor: bg,
-          side: BorderSide(color: border),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        onPressed: () {},
-        child: Text(text, style: TextStyle(color: fg)),
       ),
     );
   }

@@ -1,26 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
 import 'categories_page.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/image_cache_manager.dart';
 import '../widgets/offline_notice.dart';
 import 'products_by_category_page.dart';
 import '../widgets/recommendations_widget.dart';
+import '../services/cart_service.dart';
+import '../domain/usecases/get_products_by_category_usecase.dart';
+import '../domain/entities/product.dart';
+import '../core/result.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
-
-  static const List<Map<String, String>> _promotions = <Map<String, String>>[
-    {
-      'image':
-          'https://images.unsplash.com/photo-1551024601-bec78aea704b?q=80&w=1200&auto=format&fit=crop',
-      'title': '2x1 on select beers',
-    },
-    {
-      'image':
-          'https://images.unsplash.com/photo-1552566626-52f8b828add9?q=80&w=1200&auto=format&fit=crop',
-      'title': 'Karaoke night',
-    },
-  ];
 
   static const List<_Category> _categories = <_Category>[
     _Category(id: 1, label: 'Beers', icon: Icons.local_drink_outlined),
@@ -54,7 +46,7 @@ class HomePage extends StatelessWidget {
           children: <Widget>[
             const OfflineNotice(),
             const SizedBox(height: 16),
-            _Promotions(promotions: _promotions),
+            const _TwoForOneOfferWidget(),
             const SizedBox(height: 16),
             _HeaderWithSeeAll(
               title: 'Categories',
@@ -72,66 +64,6 @@ class HomePage extends StatelessWidget {
             const RecommendationsWidget(title: 'Recommended for You', limit: 5),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _Promotions extends StatelessWidget {
-  const _Promotions({required this.promotions});
-
-  final List<Map<String, String>> promotions;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 160,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: promotions.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (BuildContext context, int index) {
-          final Map<String, String> promo = promotions[index];
-          return SizedBox(
-            width: 260,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: CachedNetworkImage(
-                      imageUrl: promo['image']!,
-                      cacheKey: 'img:banner:${promo['image']}',
-                      cacheManager: AppImageCacheManagers.banners,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      memCacheWidth: 800,
-                      memCacheHeight: 400,
-                      fadeInDuration: const Duration(milliseconds: 200),
-                      placeholderFadeInDuration: const Duration(milliseconds: 100),
-                      placeholder: (_, __) => const ColoredBox(
-                        color: Color(0xFFE0E0E0),
-                        child: Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                      errorWidget: (_, __, ___) =>
-                          const Icon(Icons.broken_image),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  promo['title']!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
-            ),
-          );
-        },
       ),
     );
   }
@@ -317,3 +249,271 @@ class _Venue {
   final String subtitle;
   final String imageUrl;
 }
+
+/// 2x1 Offer Widget - Shows special 2x1 promotion for product ID 1
+class _TwoForOneOfferWidget extends StatefulWidget {
+  const _TwoForOneOfferWidget();
+
+  @override
+  State<_TwoForOneOfferWidget> createState() => _TwoForOneOfferWidgetState();
+}
+
+class _TwoForOneOfferWidgetState extends State<_TwoForOneOfferWidget> {
+  ProductEntity? _product;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProduct();
+  }
+
+  Future<void> _loadProduct() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      // Get products from category 1 (Beers) and find product with ID 1
+      final GetProductsByCategoryUseCase useCase = GetIt.I.get<GetProductsByCategoryUseCase>();
+      final Result<List<ProductEntity>> result = await useCase(1); // Category 1 = Beers
+
+      if (!mounted) return;
+
+      if (result.isSuccess) {
+        final List<ProductEntity> products = result.data ?? [];
+        // Filter only available products and find product with ID 1
+        final List<ProductEntity> availableProducts = products.where((p) => p.available).toList();
+        final ProductEntity? product = availableProducts.cast<ProductEntity?>().firstWhere(
+          (p) => p?.id == 1,
+          orElse: () => null,
+        );
+
+        setState(() {
+          _product = product ?? (availableProducts.isNotEmpty ? availableProducts.first : null);
+          _loading = false;
+        });
+      } else {
+        setState(() {
+          _error = 'Could not load offer';
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Could not load offer';
+        _loading = false;
+      });
+    }
+  }
+
+  void _addToCart() {
+    if (_product == null) return;
+
+    // Add 2 items to cart (2x1 offer)
+    CartService.instance.addOrIncrement(
+      productId: _product!.id,
+      name: _product!.name,
+      imageUrl: _product!.imageUrl,
+      unitPrice: _product!.price,
+    );
+    CartService.instance.addOrIncrement(
+      productId: _product!.id,
+      name: _product!.name,
+      imageUrl: _product!.imageUrl,
+      unitPrice: _product!.price,
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('🎉 2x1! Added 2x ${_product!.name} to cart'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return Container(
+        height: 140,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Theme.of(context).colorScheme.primaryContainer,
+              Theme.of(context).colorScheme.secondaryContainer,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_error != null || _product == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.orange.shade700,
+            Colors.deepOrange.shade600,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: _addToCart,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // Product Image
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: CachedNetworkImage(
+                    imageUrl: _product!.imageUrl,
+                    width: 100,
+                    height: 100,
+                    fit: BoxFit.cover,
+                    cacheManager: AppImageCacheManagers.productImages,
+                    placeholder: (_, __) => Container(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      child: const Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      ),
+                    ),
+                    errorWidget: (_, __, ___) => Container(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      child: const Icon(Icons.local_drink, color: Colors.white, size: 40),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Offer Details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '2x1',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange.shade700,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'SPECIAL OFFER',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _product!.name,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Buy 1 Get 1 Free!',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withValues(alpha: 0.9),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Text(
+                            '\$${_product!.price.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'Tap to add',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // Arrow Icon
+                const Icon(
+                  Icons.arrow_forward_ios,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+

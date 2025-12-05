@@ -375,6 +375,19 @@ class _ProfilePageState extends State<ProfilePage> {
       );
       return;
     }
+
+    // Check connectivity before submitting
+    if (_isOffline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You are not connected to the internet. Please check your connection and try again.'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
     if (_surveySubmitting) return;
 
     setState(() {
@@ -384,11 +397,42 @@ class _ProfilePageState extends State<ProfilePage> {
     final SubmitSeatDeliverySurveyUseCase useCase =
         GetIt.I.get<SubmitSeatDeliverySurveyUseCase>();
     final String feedback = _seatDeliveryFeedbackCtrl.text.trim();
-    final Result<void> result = await useCase(
-      interestLevel: _mapInterestToApi(_seatDeliveryInterest!),
-      extraMinutes: _prepImpactMinutes.round(),
-      comments: feedback.isEmpty ? null : feedback,
-    );
+
+    Result<void> result;
+    try {
+      result = await useCase(
+        interestLevel: _mapInterestToApi(_seatDeliveryInterest!),
+        extraMinutes: _prepImpactMinutes.round(),
+        comments: feedback.isEmpty ? null : feedback,
+      );
+    } catch (e) {
+      // Handle unexpected errors
+      if (!mounted) return;
+      setState(() {
+        _surveySubmitting = false;
+      });
+
+      final String errorMsg = e.toString().toLowerCase();
+      final bool isConnectivityError =
+          errorMsg.contains('internet') ||
+          errorMsg.contains('connection') ||
+          errorMsg.contains('network') ||
+          errorMsg.contains('offline') ||
+          errorMsg.contains('timeout');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isConnectivityError
+                ? 'No internet connection. Please check your connection and try again.'
+                : 'Unable to submit survey. Please try again later.',
+          ),
+          backgroundColor: isConnectivityError ? Colors.orange : Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
 
     if (!mounted) return;
 
@@ -406,11 +450,29 @@ class _ProfilePageState extends State<ProfilePage> {
           content: Text(
             'Thanks! ${_interestLabel(_seatDeliveryInterest!)} · Estimated impact: ${_prepImpactMinutes.toStringAsFixed(0)} min.${feedback.isEmpty ? '' : ' Feedback: $feedback'}',
           ),
+          backgroundColor: Colors.green,
         ),
       );
     } else {
+      // Handle error result
+      final String? errorMsg = result.error;
+      final bool isConnectivityError = errorMsg != null && (
+          errorMsg.toLowerCase().contains('internet') ||
+          errorMsg.toLowerCase().contains('connection') ||
+          errorMsg.toLowerCase().contains('network') ||
+          errorMsg.toLowerCase().contains('offline') ||
+          errorMsg.toLowerCase().contains('timeout'));
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.error ?? 'Unable to submit survey')),
+        SnackBar(
+          content: Text(
+            isConnectivityError
+                ? 'You are not connected to the internet. Please check your connection and try again.'
+                : (errorMsg ?? 'Unable to submit survey'),
+          ),
+          backgroundColor: isConnectivityError ? Colors.orange : Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
       );
     }
   }

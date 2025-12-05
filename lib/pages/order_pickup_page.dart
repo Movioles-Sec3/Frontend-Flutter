@@ -13,6 +13,7 @@ import '../domain/entities/order.dart';
 import '../domain/usecases/get_my_orders_usecase.dart';
 import '../services/local_orders_storage.dart';
 import '../services/orders_db.dart';
+import '../services/orders_file_storage.dart';
 import '../services/connectivity_service.dart';
 import '../services/orders_sync_service.dart';
 import '../core/strategies/caching_strategy.dart';
@@ -48,6 +49,11 @@ class _OrderPickupPageState extends State<OrderPickupPage>
     WidgetsBinding.instance.addObserver(this);
     // Persist the last order locally for quick access
     unawaited(LocalOrdersStorage.instance.saveLastOrder(_order));
+    // Also save to file storage for persistent backup
+    final int? orderId = (_order['id'] as num?)?.toInt();
+    if (orderId != null && orderId > 0) {
+      unawaited(OrdersFileStorage.instance.saveOrderDetails(orderId, _order));
+    }
     _handleOrderStatusChange();
     _boostBrightness();
     // Initialize connectivity and sync services

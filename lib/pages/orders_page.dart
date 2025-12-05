@@ -7,15 +7,21 @@ import 'package:get_it/get_it.dart';
 import '../core/result.dart';
 import '../core/strategies/caching_strategy.dart';
 import '../core/strategies/strategy_factory.dart';
+import '../core/models/product_detail_data.dart';
 import '../domain/entities/order.dart';
 import '../domain/usecases/get_my_orders_usecase.dart';
 import '../domain/usecases/get_order_details_usecase.dart';
 import '../services/cart_service.dart';
 import '../services/local_orders_storage.dart';
 import '../services/orders_db.dart';
+import '../services/orders_file_storage.dart';
+import '../services/product_local_storage.dart';
+import '../services/local_catalog_storage.dart';
 import 'order_pickup_page.dart';
+import 'orders_storage_manager_page.dart';
 import '../services/connectivity_service.dart';
 import '../services/orders_sync_service.dart';
+import '../services/pending_reorders_service.dart';
 
 class OrdersPage extends StatefulWidget {
   const OrdersPage({super.key});
@@ -31,6 +37,7 @@ class _OrdersPageState extends State<OrdersPage> {
   bool _online = true;
   int _pending = 0;
   StreamSubscription<bool>? _onlineSub;
+  StreamSubscription<int>? _reorderSuccessSub;
 
   @override
   void initState() {
@@ -40,6 +47,8 @@ class _OrdersPageState extends State<OrdersPage> {
     ConnectivityService.instance.initialize();
     // ignore: discarded_futures
     OrdersSyncService.instance.start();
+    // ignore: discarded_futures
+    PendingReordersService.instance.initialize();
     _online = ConnectivityService.instance.isOnline;
     _onlineSub = ConnectivityService.instance.online$.listen((bool online) {
       setState(() {
@@ -51,6 +60,20 @@ class _OrdersPageState extends State<OrdersPage> {
         _load();
       }
     });
+
+    // Listen for successful pending reorder processing
+    _reorderSuccessSub = PendingReordersService.instance.reorderSuccess$.listen((int count) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$count pending order${count > 1 ? 's' : ''} added to cart!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    });
+
     _refreshPendingCount();
     _load();
   }
@@ -148,6 +171,8 @@ class _OrdersPageState extends State<OrdersPage> {
                 )
                 .toList(growable: false);
             LocalOrdersStorage.instance.saveOrders(raw);
+            // Also save to file storage for persistent backup
+            unawaited(OrdersFileStorage.instance.saveOrdersList(raw));
           } else {
             // Try offline fallback from DB first, then shared cache
             OrdersDb.instance.getOrders().then((rows) async {
@@ -203,10 +228,34 @@ class _OrdersPageState extends State<OrdersPage> {
                   _error = null;
                 });
               } else {
-                setState(() {
-                  _error = _formatError(result.error);
-                  _loading = false;
-                });
+                // Final fallback: try file storage
+                final fileList = await OrdersFileStorage.instance.readOrdersList();
+                if (!mounted) return;
+                if (fileList.isNotEmpty) {
+                  setState(() {
+                    _orders = fileList
+                        .map(
+                          (m) => OrderEntity(
+                            id: (m['id'] as num?)?.toInt() ?? 0,
+                            total: ((m['total'] ?? 0) as num).toDouble(),
+                            status: (m['estado'] ?? '').toString(),
+                            placedAt: (m['fecha_hora'] ?? '').toString(),
+                            readyAt: (m['fecha_listo'] ?? '').toString(),
+                            deliveredAt: (m['fecha_entregado'] ?? '').toString(),
+                            qr: (m['qr']),
+                            raw: m,
+                          ),
+                        )
+                        .toList();
+                    _loading = false;
+                    _error = null;
+                  });
+                } else {
+                  setState(() {
+                    _error = _formatError(result.error);
+                    _loading = false;
+                  });
+                }
               }
             });
           }
@@ -264,10 +313,34 @@ class _OrdersPageState extends State<OrdersPage> {
                   _error = null;
                 });
               } else {
-                setState(() {
-                  _error = _formatError(e.toString());
-                  _loading = false;
-                });
+                // Final fallback: try file storage
+                final fileList = await OrdersFileStorage.instance.readOrdersList();
+                if (!mounted) return;
+                if (fileList.isNotEmpty) {
+                  setState(() {
+                    _orders = fileList
+                        .map(
+                          (m) => OrderEntity(
+                            id: (m['id'] as num?)?.toInt() ?? 0,
+                            total: ((m['total'] ?? 0) as num).toDouble(),
+                            status: (m['estado'] ?? '').toString(),
+                            placedAt: (m['fecha_hora'] ?? '').toString(),
+                            readyAt: (m['fecha_listo'] ?? '').toString(),
+                            deliveredAt: (m['fecha_entregado'] ?? '').toString(),
+                            qr: (m['qr']),
+                            raw: m,
+                          ),
+                        )
+                        .toList();
+                    _loading = false;
+                    _error = null;
+                  });
+                } else {
+                  setState(() {
+                    _error = _formatError(e.toString());
+                    _loading = false;
+                  });
+                }
               }
             }
           });
@@ -284,20 +357,87 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Future<void> _persistOrdersToDb(List<OrderEntity> orders) async {
-    for (final OrderEntity o in orders) {
-      await OrdersDb.instance.upsertOrder(
-        id: o.id,
-        orderNumber: o.id.toString(),
-        total: o.total,
-        status: o.status,
-        placedAt: o.placedAt,
-        readyAt: o.readyAt,
-        deliveredAt: o.deliveredAt,
-        items:
-            const <
-              Map<String, dynamic>
-            >[], // items are not returned here; left empty
-      );
+    // Save last 20 orders with their items
+    final int ordersToSave = orders.length > 20 ? 20 : orders.length;
+    final GetOrderDetailsUseCase orderDetailsUseCase = GetIt.I.get<GetOrderDetailsUseCase>();
+
+    // Initialize product cache for saving product images
+    final ProductLocalStorage productCache = ProductLocalStorage();
+    await productCache.init();
+
+    for (int i = 0; i < ordersToSave; i++) {
+      final OrderEntity o = orders[i];
+
+      try {
+        // Fetch order items from API
+        final Result<List<Map<String, dynamic>>> itemsResult = await orderDetailsUseCase(o.id);
+
+        List<Map<String, dynamic>> items = [];
+        if (itemsResult.isSuccess && itemsResult.data != null) {
+          // Convert API format to DB format and save products to cache
+          for (final apiItem in itemsResult.data!) {
+            final int productId = (apiItem['id_producto'] as num?)?.toInt() ?? 0;
+            final String imageUrl = (apiItem['imagen_url'] ?? '').toString();
+
+            items.add(<String, dynamic>{
+              'productId': productId,
+              'name': (apiItem['nombre'] ?? '').toString(),
+              'quantity': (apiItem['cantidad'] as num?)?.toInt() ?? 0,
+              'unitPrice': ((apiItem['precio'] ?? 0) as num).toDouble(),
+            });
+
+            // Save product to cache if we have image URL (for future reorders)
+            if (imageUrl.isNotEmpty) {
+              try {
+                await productCache.saveProduct(
+                  PreparedProductData(
+                    id: productId,
+                    typeId: 0, // Not available from order details
+                    name: (apiItem['nombre'] ?? '').toString(),
+                    description: '', // Not available from order details
+                    imageUrl: imageUrl,
+                    price: ((apiItem['precio'] ?? 0) as num).toDouble(),
+                    available: true,
+                    heroTag: 'product-$productId',
+                    note: '',
+                    timesOrdered: 0,
+                  ),
+                );
+                debugPrint('✅ Cached product $productId with image: $imageUrl');
+              } catch (e) {
+                debugPrint('❌ Failed to cache product $productId: $e');
+              }
+            } else {
+              debugPrint('⚠️ No image URL for product $productId');
+            }
+          }
+        }
+
+        // Save order with items to database
+        await OrdersDb.instance.upsertOrder(
+          id: o.id,
+          orderNumber: o.id.toString(),
+          total: o.total,
+          status: o.status,
+          placedAt: o.placedAt,
+          readyAt: o.readyAt,
+          deliveredAt: o.deliveredAt,
+          items: items,
+        );
+      } catch (e) {
+        // If fetching items fails, save order without items
+        // This ensures order metadata is still saved
+        await OrdersDb.instance.upsertOrder(
+          id: o.id,
+          orderNumber: o.id.toString(),
+          total: o.total,
+          status: o.status,
+          placedAt: o.placedAt,
+          readyAt: o.readyAt,
+          deliveredAt: o.deliveredAt,
+          items: const <Map<String, dynamic>>[],
+        );
+      }
     }
   }
 
@@ -344,31 +484,169 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Future<void> _reorder(int orderId) async {
     try {
-      final GetOrderDetailsUseCase useCase = GetIt.I
-          .get<GetOrderDetailsUseCase>();
-      final Result<List<Map<String, dynamic>>> result = await useCase(orderId);
+      // Fetch order items from local database
+      final List<Map<String, dynamic>> orderItems = await OrdersDb.instance.getOrderItems(orderId);
 
-      if (result.isSuccess && result.data != null) {
-        final CartService cartService = CartService.instance;
-        cartService.reorderFromOrder(result.data!);
+      if (orderItems.isEmpty) {
+        // Try to fetch from API and save for future use
+        if (_online) {
+          try {
+            final GetOrderDetailsUseCase useCase = GetIt.I.get<GetOrderDetailsUseCase>();
+            final Result<List<Map<String, dynamic>>> result = await useCase(orderId);
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Order items added to cart!'),
-              backgroundColor: Colors.green,
-            ),
-          );
+            if (result.isSuccess && result.data != null && result.data!.isNotEmpty) {
+              // Initialize product cache
+              final ProductLocalStorage productCache = ProductLocalStorage();
+              await productCache.init();
+
+              // Save to database for future reorders
+              final List<Map<String, dynamic>> items = [];
+              for (final apiItem in result.data!) {
+                final int productId = (apiItem['id_producto'] as num?)?.toInt() ?? 0;
+                final String imageUrl = (apiItem['imagen_url'] ?? '').toString();
+
+                items.add(<String, dynamic>{
+                  'productId': productId,
+                  'name': (apiItem['nombre'] ?? '').toString(),
+                  'quantity': (apiItem['cantidad'] as num?)?.toInt() ?? 0,
+                  'unitPrice': ((apiItem['precio'] ?? 0) as num).toDouble(),
+                });
+
+                // Save product to cache with image URL
+                if (imageUrl.isNotEmpty) {
+                  try {
+                    await productCache.saveProduct(
+                      PreparedProductData(
+                        id: productId,
+                        typeId: 0,
+                        name: (apiItem['nombre'] ?? '').toString(),
+                        description: '',
+                        imageUrl: imageUrl,
+                        price: ((apiItem['precio'] ?? 0) as num).toDouble(),
+                        available: true,
+                        heroTag: 'product-$productId',
+                        note: '',
+                        timesOrdered: 0,
+                      ),
+                    );
+                  } catch (e) {
+                    debugPrint('Failed to cache product $productId: $e');
+                  }
+                }
+              }
+
+              // Find the order to get its details
+              final OrderEntity? order = _orders.cast<OrderEntity?>().firstWhere(
+                (o) => o?.id == orderId,
+                orElse: () => null,
+              );
+
+              await OrdersDb.instance.upsertOrder(
+                id: orderId,
+                orderNumber: orderId.toString(),
+                total: order?.total ?? 0,
+                status: order?.status ?? 'UNKNOWN',
+                placedAt: order?.placedAt ?? DateTime.now().toIso8601String(),
+                readyAt: order?.readyAt,
+                deliveredAt: order?.deliveredAt,
+                items: items,
+              );
+
+              // Now add to cart
+              final CartService cartService = CartService.instance;
+              cartService.reorderFromOrder(result.data!);
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Order items added to cart!'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+              return;
+            }
+          } catch (_) {
+            // Fall through to error message
+          }
         }
-      } else {
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to reorder: ${result.error}'),
-              backgroundColor: Colors.red,
+              content: Text(_online
+                ? 'Unable to load order items. This order may no longer be available.'
+                : 'This order is not saved locally. Please connect to the internet and refresh your orders, then try again.'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 5),
             ),
           );
         }
+        return;
+      }
+
+      // Convert database format to cart format and fetch image URLs from catalog cache
+      final ProductLocalStorage productCache = ProductLocalStorage();
+      await productCache.init();
+
+      // Fetch all products first to build an image URL map
+      final Map<int, String> imageUrlMap = <int, String>{};
+      for (final item in orderItems) {
+        final int productId = (item['product_id'] as num?)?.toInt() ?? 0;
+        if (productId > 0 && !imageUrlMap.containsKey(productId)) {
+          try {
+            // First try: LocalCatalogStorage (main catalog/home page products)
+            final catalogProduct = await LocalCatalogStorage.instance.readProduct(productId);
+            if (catalogProduct != null) {
+              final String imageUrl = (catalogProduct['imagen_url'] ?? catalogProduct['imageUrl'] ?? '').toString();
+              if (imageUrl.isNotEmpty) {
+                imageUrlMap[productId] = imageUrl;
+                debugPrint('✅ Found image for product $productId from catalog: $imageUrl');
+                continue;
+              }
+            }
+
+            // Second try: ProductLocalStorage (browsed products cache)
+            final product = await productCache.getProduct(productId);
+            if (product != null && product.imageUrl.isNotEmpty) {
+              imageUrlMap[productId] = product.imageUrl;
+              debugPrint('✅ Found image for product $productId from product cache: ${product.imageUrl}');
+            } else {
+              debugPrint('⚠️ No image found for product $productId in any cache');
+            }
+          } catch (e) {
+            debugPrint('❌ Failed to fetch product $productId from cache: $e');
+          }
+        }
+      }
+
+      debugPrint('📦 Total products: ${orderItems.length}, Images found: ${imageUrlMap.length}');
+
+      // Build products list with image URLs
+      final List<Map<String, dynamic>> products = orderItems.map((item) {
+        final int productId = (item['product_id'] as num?)?.toInt() ?? 0;
+        final String imageUrl = imageUrlMap[productId] ?? '';
+
+        return <String, dynamic>{
+          'id_producto': productId,
+          'nombre': item['name'],
+          'cantidad': item['quantity'],
+          'precio': item['unit_price'],
+          'imagen_url': imageUrl,
+        };
+      }).toList();
+
+      // Add items to cart
+      final CartService cartService = CartService.instance;
+      cartService.reorderFromOrder(products);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Order items added to cart!'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -376,6 +654,7 @@ class _OrdersPageState extends State<OrdersPage> {
           SnackBar(
             content: Text('Error reordering: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -405,11 +684,13 @@ class _OrdersPageState extends State<OrdersPage> {
       return const Center(child: Text('No orders yet.'));
     }
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        await _refreshPendingCount();
-        return _load();
-      },
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: () async {
+            await _refreshPendingCount();
+            return _load();
+          },
       child: ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: _orders.length + _headerCount,
@@ -507,6 +788,24 @@ class _OrdersPageState extends State<OrdersPage> {
           );
         },
       ),
+        ),
+        // Floating Action Button for Storage Manager
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: FloatingActionButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const OrdersStorageManagerPage(),
+                ),
+              );
+            },
+            tooltip: 'Manage Storage & Backups',
+            child: const Icon(Icons.storage),
+          ),
+        ),
+      ],
     );
   }
 
@@ -519,7 +818,7 @@ class _OrdersPageState extends State<OrdersPage> {
         padding: const EdgeInsets.all(12),
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: Colors.orange.withOpacity(0.15),
+          color: Colors.orange.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: Colors.orange),
         ),
@@ -536,7 +835,7 @@ class _OrdersPageState extends State<OrdersPage> {
       padding: const EdgeInsets.all(12),
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.12),
+        color: Colors.blue.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.blueAccent),
       ),
@@ -553,8 +852,10 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   @override
+  @override
   void dispose() {
     _onlineSub?.cancel();
+    _reorderSuccessSub?.cancel();
     super.dispose();
   }
 }

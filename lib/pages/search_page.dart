@@ -165,10 +165,37 @@ class _SearchPageState extends State<SearchPage> {
     } else {
       String errorMessage = result.error ?? 'We could not complete the search.';
       final String normalized = errorMessage.toLowerCase();
+
+      // Check for network/connectivity issues
       final bool offline =
           normalized.contains('network') ||
           normalized.contains('socketexception') ||
-          normalized.contains('internet');
+          normalized.contains('internet') ||
+          normalized.contains('connection');
+
+      // Check if it's a "not found" error (common API response for no results)
+      final bool notFound =
+          normalized.contains('not found') ||
+          normalized.contains('no encontrado') ||
+          normalized.contains('404') ||
+          normalized.contains('no products') ||
+          normalized.contains('no results');
+
+      // Check for any technical/API errors (parsing errors, type errors, etc.)
+      final bool technicalError =
+          normalized.contains('typeerror') ||
+          normalized.contains('exception') ||
+          normalized.contains('error:') ||
+          normalized.contains('parsing') ||
+          normalized.contains('pydantic') ||
+          normalized.contains('invalid') ||
+          normalized.contains('failed to') ||
+          normalized.contains('unable to') ||
+          normalized.contains('[') || // Often indicates error codes/stack traces
+          normalized.contains('http') ||
+          normalized.contains('500') ||
+          normalized.contains('502') ||
+          normalized.contains('503');
 
       if (offline && mounted) {
         final ScaffoldMessengerState? messenger = ScaffoldMessenger.maybeOf(
@@ -181,6 +208,12 @@ class _SearchPageState extends State<SearchPage> {
           ),
         );
         errorMessage = 'You are offline. Try again once you reconnect.';
+      } else if (notFound) {
+        // User-friendly message for product not found
+        errorMessage = 'No products found with the name "$query".\nPlease check the spelling and try the exact product name.';
+      } else if (technicalError) {
+        // Convert any technical error to user-friendly message
+        errorMessage = 'No products found with the name "$query".\nPlease check the spelling and try the exact product name.';
       }
 
       final bool hadResults = _results.isNotEmpty;
@@ -318,28 +351,36 @@ class _SearchPageState extends State<SearchPage> {
 
   Widget _buildResults(ThemeData theme, bool hasQuery) {
     final bool hasError = _error != null && _error!.isNotEmpty;
+    final bool isNotFoundError = hasError && (_error!.contains('No products found') || _error!.toLowerCase().contains('not found'));
 
     if (hasError && _results.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(Icons.error_outline, color: theme.colorScheme.error, size: 40),
-            const SizedBox(height: 12),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.error,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(
+                isNotFoundError ? Icons.search_off : Icons.error_outline,
+                color: isNotFoundError ? theme.colorScheme.primary : theme.colorScheme.error,
+                size: 48,
               ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: () => _search(_controller.text),
-              icon: const Icon(Icons.refresh),
-              label: const Text('Try again'),
-            ),
-          ],
+              const SizedBox(height: 16),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: isNotFoundError ? theme.textTheme.bodyMedium?.color : theme.colorScheme.error,
+                ),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => _search(_controller.text),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Try again'),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -352,14 +393,14 @@ class _SearchPageState extends State<SearchPage> {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Icon(
-                Icons.travel_explore_outlined,
+                hasQuery ? Icons.search_off : Icons.travel_explore_outlined,
                 size: 48,
                 color: theme.colorScheme.primary.withOpacity(0.6),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Text(
                 hasQuery
-                    ? 'No products match your search.'
+                    ? 'No products found with that name.\nTry checking the spelling or use the exact product name.'
                     : 'Type a product name to start searching.',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium,
@@ -375,25 +416,32 @@ class _SearchPageState extends State<SearchPage> {
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (BuildContext context, int index) {
         if (hasError && index == 0) {
+          final bool isNotFoundInline = _error!.contains('No products found') || _error!.toLowerCase().contains('not found');
           return Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: theme.colorScheme.errorContainer,
+              color: isNotFoundInline
+                  ? theme.colorScheme.primaryContainer
+                  : theme.colorScheme.errorContainer,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
-                  Icons.error_outline,
-                  color: theme.colorScheme.onErrorContainer,
+                  isNotFoundInline ? Icons.info_outline : Icons.error_outline,
+                  color: isNotFoundInline
+                      ? theme.colorScheme.onPrimaryContainer
+                      : theme.colorScheme.onErrorContainer,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     _error!,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onErrorContainer,
+                      color: isNotFoundInline
+                          ? theme.colorScheme.onPrimaryContainer
+                          : theme.colorScheme.onErrorContainer,
                     ),
                   ),
                 ),
